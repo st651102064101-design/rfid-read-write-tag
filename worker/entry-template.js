@@ -41,7 +41,7 @@ export default {async fetch(request,env){
  try{
   if(url.pathname==='/api/write/config'&&request.method==='GET'){
    if(env.WRITE_ENABLED!=='true')return json({ok:true,available:false,disabled:true});
-   if(!env.WRITE_BRIDGE_TOKEN||!env.WRITE_OPERATOR_KEY)return json({ok:true,available:false});
+   if(!env.WRITE_BRIDGE_TOKEN)return json({ok:true,available:false});
    const {results}=await database(env).prepare('SELECT last_seen FROM writer_bridge WHERE id=1').all();return json({ok:true,available:!!results[0]&&Date.now()-Date.parse(results[0].last_seen)<60000});
   }
   if(url.pathname==='/api/bridge/poll'&&request.method==='POST'){
@@ -54,14 +54,12 @@ export default {async fetch(request,env){
    return json({ok:true,command:results[0]?JSON.parse(results[0].payload):null});
   }
   if(url.pathname==='/api/write/result'&&request.method==='GET'){
-   if(!env.WRITE_OPERATOR_KEY||request.headers.get('x-write-key')!==env.WRITE_OPERATOR_KEY)return json({error:'Unauthorized'},401);
    const {results}=await database(env).prepare('SELECT * FROM writer_commands WHERE request_id=?').bind(url.searchParams.get('requestId')||'').all();const row=results[0];if(!row)return json({error:'Request not found'},404);
    if(row.result)return json(JSON.parse(row.result));const p=JSON.parse(row.payload);return json({requestId:row.request_id,epc:p.epc,status:Date.now()-Date.parse(row.created_at)>45000?'unknown':row.status,verified:false});
   }
   if(url.pathname==='/api/write'&&request.method==='POST'){
    if(env.WRITE_ENABLED!=='true')return json({error:'ปิดการเขียนแท็กจริงไว้'},403);
-   if(!env.WRITE_BRIDGE_TOKEN||!env.WRITE_OPERATOR_KEY)return json({error:'Writer bridge is not configured'},503);
-   if(request.headers.get('x-write-key')!==env.WRITE_OPERATOR_KEY)return json({error:'รหัสอนุญาตเขียนไม่ถูกต้อง'},401);
+   if(!env.WRITE_BRIDGE_TOKEN)return json({error:'Writer bridge is not configured'},503);
    const body=await readBody(request);
    if(!body||body.operation!=='write'||!['USER','EPC','TID','RESERVED'].includes(body.memoryBank)||!/^(?:[0-9a-f]{2})+$/i.test(body.epc||'')||!/^(?:[0-9a-f]{4})+$/i.test(body.dataHex||'')||body.dataHex.length>2048||!Number.isSafeInteger(body.offsetBytes)||body.offsetBytes<0||body.offsetBytes%2)return json({error:'Invalid write request'},422);
    if(!/^[a-z0-9-]{8,80}$/i.test(body.requestId||''))return json({error:'Invalid request ID'},422);

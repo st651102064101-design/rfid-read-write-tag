@@ -203,7 +203,7 @@ $('memoryBank').addEventListener('change',()=>{
  $('bankNote').textContent=bank==='TID'?'TID มักล็อกถาวรจากโรงงาน เขียนได้เฉพาะชิปที่รองรับ':bank==='RESERVED'?'Reserved เก็บ Kill/Access password ต้องตรวจค่าก่อนเขียน':bank==='EPC'?'เริ่มที่ byte 4 (word 2) เพื่อไม่ทับ CRC/PC':'เขียน USER Memory';update();
 });
 
-async function writerStatus(){try{const response=await fetch('/api/write/config');const data=await response.json();endpoint=data.available?'/api/write':'';$('below').textContent=data.disabled?'ปิดการเขียนแท็กจริงไว้ · หน้านี้ใช้ดูข้อมูลและเตรียมค่าเท่านั้น':data.available?'Notebook bridge พร้อม · เขียนแล้วอ่านกลับยืนยันทุกครั้ง':'Notebook bridge ออฟไลน์ · เปิด notebook และโปรแกรม bridge';if(data.disabled)$('write').innerHTML='<span>✎</span> ปิดใช้งานการเขียนจริง';update();}catch{endpoint='';update();}}writerStatus();setInterval(writerStatus,10000);
+async function writerStatus(){try{const response=await fetch('/api/write/config');const data=await response.json();endpoint=data.available?'/api/write':'';$('below').textContent=data.available?'เขียนจริง · อ่านกลับยืนยันทุกครั้ง · notebook bridge เชื่อมต่อแล้ว':'กำลังรอ notebook bridge · เปิด notebook และโปรแกรม bridge';$('write').innerHTML=data.available?'<span>✎</span> เขียนข้อมูลแท็ก':'<span>✎</span> รอการเชื่อมต่อ';update();}catch{endpoint='';$('below').textContent='ตรวจสอบการเชื่อมต่อ notebook bridge ไม่ได้';$('write').innerHTML='<span>✎</span> รอการเชื่อมต่อ';update();}}writerStatus();setInterval(writerStatus,10000);
 
 
 
