@@ -40,10 +40,12 @@ export default {async fetch(request,env){
  const url=new URL(request.url);
  try{
   if(url.pathname==='/api/write/config'&&request.method==='GET'){
+   if(env.WRITE_ENABLED!=='true')return json({ok:true,available:false,disabled:true});
    if(!env.WRITE_BRIDGE_TOKEN||!env.WRITE_OPERATOR_KEY)return json({ok:true,available:false});
    const {results}=await database(env).prepare('SELECT last_seen FROM writer_bridge WHERE id=1').all();return json({ok:true,available:!!results[0]&&Date.now()-Date.parse(results[0].last_seen)<60000});
   }
   if(url.pathname==='/api/bridge/poll'&&request.method==='POST'){
+   if(env.WRITE_ENABLED!=='true')return json({error:'Tag writing is disabled'},403);
    if(!env.WRITE_BRIDGE_TOKEN||request.headers.get('authorization')!=='Bearer '+env.WRITE_BRIDGE_TOKEN)return json({error:'Unauthorized'},401);
    const body=await readBody(request),db=database(env),now=new Date().toISOString();
    await db.prepare('INSERT INTO writer_bridge (id,last_seen) VALUES (1,?) ON CONFLICT(id) DO UPDATE SET last_seen=excluded.last_seen').bind(now).run();
@@ -57,6 +59,7 @@ export default {async fetch(request,env){
    if(row.result)return json(JSON.parse(row.result));const p=JSON.parse(row.payload);return json({requestId:row.request_id,epc:p.epc,status:Date.now()-Date.parse(row.created_at)>45000?'unknown':row.status,verified:false});
   }
   if(url.pathname==='/api/write'&&request.method==='POST'){
+   if(env.WRITE_ENABLED!=='true')return json({error:'ปิดการเขียนแท็กจริงไว้'},403);
    if(!env.WRITE_BRIDGE_TOKEN||!env.WRITE_OPERATOR_KEY)return json({error:'Writer bridge is not configured'},503);
    if(request.headers.get('x-write-key')!==env.WRITE_OPERATOR_KEY)return json({error:'รหัสอนุญาตเขียนไม่ถูกต้อง'},401);
    const body=await readBody(request);
