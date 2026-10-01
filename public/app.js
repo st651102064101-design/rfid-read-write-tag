@@ -11,6 +11,21 @@ if(document.modelContext?.registerTool){try{Promise.resolve(document.modelContex
 const feedList=document.getElementById('eventList');
 const LIVE_TAG_TTL_MS=5000;
 let olderCursor=null,onOlderPage=false,feedLoading=false,liveBusy=false,feedSignature='',latestId=0,visibleEvents=[],pendingEvents=0,selectedEpc='';
+const tagChoices=new Map();let tagOptionEvents=new Set(),tagOptionsDirty=false;
+function rememberTags(events){
+ for(const event of events){const eventKey=String(event.id??event.receivedAt);if(tagOptionEvents.has(eventKey))continue;tagOptionEvents.add(eventKey);const epcs=findEpcs(event.payload);for(const epc of epcs){const choice=tagChoices.get(epc)||{epc,count:0,event,lastAt:event.receivedAt};choice.count++;if(!choice.lastAt||Date.parse(event.receivedAt)>=Date.parse(choice.lastAt)){choice.event=event;choice.lastAt=event.receivedAt;}tagChoices.set(epc,choice);}}
+ while(tagOptionEvents.size>2000)tagOptionEvents.delete(tagOptionEvents.values().next().value);
+ const recent=[...tagChoices.values()].sort((a,b)=>Date.parse(b.lastAt)-Date.parse(a.lastAt));for(const choice of recent.slice(50))if(choice.epc!==selectedEpc)tagChoices.delete(choice.epc);
+ updateTagOptions();
+}
+function updateTagOptions(force=false){
+ const select=$('epc');if(!select)return;if(!force&&document.activeElement===select){tagOptionsDirty=true;return;}
+ const choices=[...tagChoices.values()].sort((a,b)=>Date.parse(b.lastAt)-Date.parse(a.lastAt)).slice(0,50);select.replaceChildren(new Option('เลือก EPC จากแท็กที่อ่านพบ ('+choices.length+')',''));
+ for(const choice of choices){const option=new Option(choice.epc+' · อ่านพบ '+choice.count+' ครั้ง · '+new Date(choice.lastAt).toLocaleTimeString('th-TH'),choice.epc);select.add(option);}
+ select.value=choices.some(choice=>choice.epc===selectedEpc)?selectedEpc:'';tagOptionsDirty=false;
+}
+const epcSelect=$('epc');epcSelect.addEventListener('change',()=>{selectedEpc=epcSelect.value;const choice=tagChoices.get(selectedEpc);updateTagDetails(choice?{...choice,count:choice.count}:null);});
+epcSelect.addEventListener('blur',()=>{if(tagOptionsDirty)updateTagOptions(true);});
 function el(tag,text,className){const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(className)n.className=className;return n;}
 function findEpcs(value){
  const found=new Set(),queue=[value];
@@ -28,7 +43,7 @@ function renderEvents(events){
  const openCards=new Set([...feedList.querySelectorAll('.eventcard[open]')].map(card=>card.dataset.epc||card.dataset.eventId));
  const openRaw=new Set([...feedList.querySelectorAll('details[data-raw-key][open]')].map(card=>card.dataset.rawKey));
  feedList.replaceChildren();
-  if(!events.length){feedList.append(el('p','ไม่พบแท็กในช่วง 5 วินาทีล่าสุด · ข้อมูลย้อนหลังยังคงบันทึกไว้','empty'));updateTagDetails(null);return;}
+  if(!events.length){feedList.append(el('p','ไม่พบแท็กในช่วง 5 วินาทีล่าสุด · ข้อมูลย้อนหลังยังคงบันทึกไว้','empty'));if(selectedEpc&&tagChoices.has(selectedEpc))updateTagDetails(tagChoices.get(selectedEpc));else updateTagDetails(null);return;}
  const grouped=new Map(),display=[];
  for(const event of [...events].sort((a,b)=>Number(a.id)-Number(b.id))){
   const epcs=findEpcs(event.payload);
@@ -37,17 +52,17 @@ function renderEvents(events){
  }
   display.push(...grouped.values());
   display.sort((a,b)=>Date.parse(b.event.receivedAt)-Date.parse(a.event.receivedAt));
-  if(!display.length){feedList.append(el('p','ยังไม่มีข้อมูล EPC ในช่วง 5 วินาทีล่าสุด','empty'));updateTagDetails(null);return;}
-  const selected=display.find(item=>item.epc===selectedEpc)||display[0];selectedEpc=selected.epc;updateTagDetails(selected);
+  if(!display.length){feedList.append(el('p','ยังไม่มีข้อมูล EPC ในช่วง 5 วินาทีล่าสุด','empty'));if(selectedEpc&&tagChoices.has(selectedEpc))updateTagDetails(tagChoices.get(selectedEpc));else updateTagDetails(null);return;}
+  const selected=display.find(item=>item.epc===selectedEpc)||tagChoices.get(selectedEpc)||display[0];selectedEpc=selected.epc;updateTagOptions();updateTagDetails(selected);
   for(const item of display){
   const event=item.event;
   const card=el('details',undefined,'eventcard'),summary=el('summary');
   card.dataset.epc=item.epc||'';card.dataset.eventId=String(event.id);
   if(openCards.has(card.dataset.epc||card.dataset.eventId))card.open=true;
   summary.append(el('strong',item.epc?item.epc+' · อ่านพบ '+item.count+' ครั้ง':'Event / สถานะเครื่อง'),el('span',new Date(event.receivedAt).toLocaleString('th-TH')+' · #'+event.id));
-  card.append(summary);summary.addEventListener('click',()=>{selectedEpc=item.epc;updateTagDetails(item);});
+  card.append(summary);summary.addEventListener('click',()=>{selectedEpc=item.epc;updateTagOptions();updateTagDetails(item);});
   const buttons=el('div',undefined,'epcButtons');
-  if(item.epc){const button=el('button','ใช้ EPC '+item.epc);button.type='button';button.onclick=()=>{selectedEpc=item.epc;updateTagDetails(item);$('epc').value=item.epc;$('epc').scrollIntoView({behavior:'smooth',block:'center'});$('epc').focus();};buttons.append(button);}
+  if(item.epc){const button=el('button','ใช้ EPC '+item.epc);button.type='button';button.onclick=()=>{selectedEpc=item.epc;updateTagOptions();updateTagDetails(tagChoices.get(item.epc)||item);$('epc').value=item.epc;$('epc').scrollIntoView({behavior:'smooth',block:'center'});$('epc').focus();};buttons.append(button);}
   card.append(buttons);if(item.epc)card.append(memorySummary(event.payload,item.epc,item.count,event.receivedAt));
   const table=el('table'),tbody=el('tbody');
   for(const [key,value] of fields(event.payload)){const tr=el('tr');tr.append(el('th',key),el('td',value));tbody.append(tr);}table.append(tbody);card.append(table);
@@ -60,7 +75,7 @@ async function loadEvents(before=null,manual=false){
  try{
   const response=await fetch('/api/events'+(before?'?before='+before:''),{cache:'no-store',signal:AbortSignal.timeout(12000)});
   const data=await response.json();if(!response.ok||!data.ok)throw Error(data.error||'โหลดข้อมูลไม่ได้');
-  olderCursor=data.nextBefore;onOlderPage=!!before;
+  olderCursor=data.nextBefore;onOlderPage=!!before;rememberTags(data.events);
   visibleEvents=onOlderPage?data.events:data.events.filter(isRecent);for(const item of data.events)latestId=Math.max(latestId,Number(item.id));pendingEvents=0;
   const signature=visibleEvents.map(e=>e.id).join(',');
   renderEvents(visibleEvents);feedSignature=signature;
@@ -76,7 +91,7 @@ async function pollLive(){
  try{
   const response=await fetch('/api/events/live?after='+latestId,{cache:'no-store',signal:AbortSignal.timeout(8000)});
   const data=await response.json();if(!response.ok||!data.ok)throw Error(data.error||'รับข้อมูลสดไม่ได้');
-  if(data.events.length){for(const item of data.events)latestId=Math.max(latestId,Number(item.id));
+  if(data.events.length){rememberTags(data.events);for(const item of data.events)latestId=Math.max(latestId,Number(item.id));
    if(onOlderPage){pendingEvents+=data.events.length;$('latestEvents').textContent='ข้อมูลล่าสุด (+'+pendingEvents+')';}
    else {const combined=[...data.events,...visibleEvents];const unique=[...new Map(combined.map(item=>[Number(item.id),item])).values()].sort((a,b)=>Number(b.id)-Number(a.id));visibleEvents=unique.filter(isRecent).slice(0,50);olderCursor=unique.length>50?unique[49].id:olderCursor;renderEvents(visibleEvents);feedSignature=visibleEvents.map(e=>e.id).join(',');$('olderEvents').hidden=!olderCursor;$('feedStatus').textContent='LIVE · '+readSummary(visibleEvents);}
   }
@@ -117,7 +132,8 @@ pollReaderStatus();setInterval(pollReaderStatus,1000);
 
 function updateTagDetails(item){
  const panel=$('tagDetails');if(!panel)return;
- if(!item){selectedEpc='';panel.replaceChildren(el('p','ยังไม่พบแท็กในช่วง 5 วินาทีล่าสุด · รายละเอียดจะแสดงเมื่อ reader อ่านพบแท็ก','empty'));return;}
+ if(!item){selectedEpc='';if($('epc'))$('epc').value='';panel.replaceChildren(el('p','ยังไม่พบแท็กในช่วง 5 วินาทีล่าสุด · รายละเอียดจะแสดงเมื่อ reader อ่านพบแท็ก','empty'));return;}
+ if($('epc')&&[...$('epc').options].some(option=>option.value===item.epc))$('epc').value=item.epc;
  panel.replaceChildren(memorySummary(item.event.payload,item.epc,item.count,item.event.receivedAt));
 }
 function memorySummary(payload,epc,count=1,receivedAt=''){

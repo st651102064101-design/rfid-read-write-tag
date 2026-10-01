@@ -23,9 +23,17 @@ const event=(id,epc='AABB',age=0)=>({id,receivedAt:new Date(Date.now()-age).toIS
 test('built page starts without removed webhook controls, shows fresh tags, and groups duplicates',async()=>{
  const a=await setup([event(3),event(2),event(1,'CCDD')]);try{
  assert.equal(a.errors.length,0);assert.equal(a.doc.getElementById('save'),null);
+ assert.equal(a.doc.getElementById('epc').tagName,'SELECT');assert.deepEqual([...a.doc.getElementById('epc').options].slice(1).map(option=>option.value),['AABB','CCDD']);
  assert.equal(a.doc.querySelectorAll('.eventcard').length,2);
  assert.match(a.doc.getElementById('eventList').textContent,/AABB · อ่านพบ 2 ครั้ง/);
  assert.doesNotMatch(a.doc.getElementById('feedStatus').textContent,/กำลังโหลด/);
+ }finally{a.close();}
+});
+test('user can select a previously read EPC from the dropdown',async()=>{
+ const a=await setup([event(2,'CCDD'),event(1,'AABB')]);try{const select=a.doc.getElementById('epc');select.value='AABB';select.dispatchEvent(new a.dom.window.Event('change'));
+ assert.equal(select.value,'AABB');assert.match(a.doc.getElementById('tagDetails').textContent,/EPC · AABB/);const preview=a.dom.window.document.getElementById('writer');
+ a.doc.getElementById('offset').value='0';a.doc.getElementById('data').value='OK';a.doc.getElementById('data').dispatchEvent(new a.dom.window.Event('input'));
+ assert.equal(a.dom.window.document.getElementById('tagDetails').textContent.includes('EPC · AABB'),true);
  }finally{a.close();}
 });
 test('empty and stale initial responses render an explicit empty state',async()=>{
@@ -35,7 +43,7 @@ test('live updates count once per event, then expire after five seconds',async()
  const a=await setup([event(1)]);try{a.state.live=[event(2)];await a.tick(500);await a.tick(500);
  assert.equal(a.doc.querySelectorAll('.eventcard').length,1);assert.match(a.doc.getElementById('eventList').textContent,/อ่านพบ 2 ครั้ง/);
  a.state.live=[];a.advance(6000);await a.tick(500);assert.equal(a.doc.querySelectorAll('.eventcard').length,0);assert.match(a.doc.getElementById('eventList').textContent,/ไม่พบแท็ก/);
- assert.match(a.doc.getElementById('tagDetails').textContent,/ยังไม่พบแท็ก/);assert.doesNotMatch(a.doc.getElementById('tagDetails').textContent,/AABB/);
+ assert.match(a.doc.getElementById('tagDetails').textContent,/EPC · AABB/);assert.match(a.doc.getElementById('eventList').textContent,/ไม่พบแท็ก/);
  }finally{a.close();}
 });
 test('large expired backlog does not throw or leave loading status stuck',async()=>{
