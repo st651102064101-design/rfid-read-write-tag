@@ -65,6 +65,14 @@ test('odd byte payloads are never padded and cannot be submitted',async()=>{
   data.value='BOX-0080';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('length').value,'8');assert.equal(a.doc.getElementById('count').textContent,'8 bytes');assert.match(a.doc.getElementById('paddingNote').textContent,/จำนวนไบต์เป็นเลขคู่/);assert.equal(a.doc.getElementById('write').disabled,false);
  }finally{a.close();}
 });
+test('switching ASCII and HEX preserves the entered bytes',async()=>{
+ const a=await setup([],{writeAvailable:true});try{
+ const bank=a.doc.getElementById('memoryBank');bank.value='USER';bank.dispatchEvent(new a.dom.window.Event('change'));
+ const data=a.doc.getElementById('data'),ascii=a.doc.querySelector('[name=format][value="ASCII"]'),hex=a.doc.querySelector('[name=format][value="HEX"]');data.value='BOX-0070';data.dispatchEvent(new a.dom.window.Event('input'));
+ hex.checked=true;hex.dispatchEvent(new a.dom.window.Event('change'));assert.equal(data.value,'424F582D30303730');assert.equal(a.doc.getElementById('length').value,'8');assert.equal(a.doc.getElementById('write').disabled,false);
+ ascii.checked=true;ascii.dispatchEvent(new a.dom.window.Event('change'));assert.equal(data.value,'BOX-0070');assert.equal(a.doc.getElementById('length').value,'8');assert.equal(a.doc.getElementById('write').disabled,false);
+ }finally{a.close();}
+});
 test('verified write shows a success toast fixed at the bottom-right',async()=>{
  const a=await setup([event(1,'AABB')],{writeAvailable:true});try{const bank=a.doc.getElementById('memoryBank');bank.value='USER';bank.dispatchEvent(new a.dom.window.Event('change'));const data=a.doc.getElementById('data');data.value='EVEN';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('write').disabled,false);
   await a.doc.getElementById('writer').onsubmit(new a.dom.window.Event('submit',{cancelable:true}));const toast=a.doc.getElementById('toast');assert.equal(toast.hidden,false);assert.ok(toast.classList.contains('success'));assert.match(toast.textContent,/เขียนข้อมูลสำเร็จ/);assert.match(a.doc.getElementById('tagDetails').textContent,/EPC · AABB/);
