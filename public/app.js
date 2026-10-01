@@ -19,7 +19,7 @@ if(document.modelContext?.registerTool){try{Promise.resolve(document.modelContex
 
 const feedList=document.getElementById('eventList');
 const LIVE_TAG_TTL_MS=5000;
-let olderCursor=null,onOlderPage=false,feedLoading=false,liveBusy=false,feedSignature='',latestId=0,visibleEvents=[],pendingEvents=0,selectedEpc='';
+let olderCursor=null,onOlderPage=false,feedLoading=false,liveBusy=false,feedSignature='',latestId=0,visibleEvents=[],pendingEvents=0,selectedEpc='',selectionInitialized=false;
 let tagOptionEvents=new Set(),tagOptionsDirty=false;
 function rememberTags(events){
  for(const event of events){const eventKey=String(event.id??event.receivedAt);if(tagOptionEvents.has(eventKey))continue;tagOptionEvents.add(eventKey);const epcs=findEpcs(event.payload);for(const epc of epcs){const choice=tagChoices.get(epc)||{epc,count:0,event,lastAt:event.receivedAt};choice.count++;if(!choice.lastAt||Date.parse(event.receivedAt)>=Date.parse(choice.lastAt)){choice.event=event;choice.lastAt=event.receivedAt;}delete choice.pendingRead;tagChoices.set(epc,choice);}}
@@ -33,8 +33,9 @@ function updateTagOptions(force=false){
  for(const choice of choices){const status=userReadStatus(choice.event?.payload,choice.epc),ascii=epcAscii(choice.epc),name=ascii?ascii+' · '+choice.epc:choice.epc;const option=new Option(name+' · '+(choice.pendingRead?'เขียนแล้ว · รอ reader อ่านซ้ำ':status.label+' · อ่านพบ '+choice.count+' ครั้ง'),choice.epc);select.add(option);}
  select.value=choices.some(choice=>choice.epc===selectedEpc)?selectedEpc:'';tagOptionsDirty=false;
 }
-function selectWrittenEpc(value){const epc=String(value||'').trim().toUpperCase();if(!/^(?:[0-9A-F]{2})+$/.test(epc))return;const current=tagChoices.get(epc);if(!current){tagChoices.set(epc,{epc,count:0,lastAt:new Date().toISOString(),pendingRead:true,event:{id:'write-result-'+Date.now(),receivedAt:new Date().toISOString(),payload:[{type:'INVENTORY',idHex:epc}]}});}selectedEpc=epc;updateTagOptions(true);const select=$('epc');select.value=epc;updateTagDetails(tagChoices.get(epc));update();}
-const epcSelect=$('epc');epcSelect.addEventListener('change',()=>{selectedEpc=epcSelect.value;const choice=tagChoices.get(selectedEpc);updateTagDetails(choice?{...choice,count:choice.count}:null);update();});
+function syncTagSelectionButtons(){for(const button of document.querySelectorAll('.chooseTag[data-epc]')){const selected=button.dataset.epc===selectedEpc;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));button.textContent=selected?'✓ เลือกอยู่ · แตะเพื่อยกเลิก':'เลือกแท็กนี้เพื่อเขียน';button.setAttribute('aria-label',selected?'ยกเลิกการเลือก EPC '+button.dataset.epc:'เลือก EPC '+button.dataset.epc+' ในฟอร์มเขียน');}}
+function selectWrittenEpc(value){const epc=String(value||'').trim().toUpperCase();if(!/^(?:[0-9A-F]{2})+$/.test(epc))return;const current=tagChoices.get(epc);if(!current){tagChoices.set(epc,{epc,count:0,lastAt:new Date().toISOString(),pendingRead:true,event:{id:'write-result-'+Date.now(),receivedAt:new Date().toISOString(),payload:[{type:'INVENTORY',idHex:epc}]}});}selectedEpc=epc;selectionInitialized=true;updateTagOptions(true);const select=$('epc');select.value=epc;updateTagDetails(tagChoices.get(epc));update();syncTagSelectionButtons();}
+const epcSelect=$('epc');epcSelect.addEventListener('change',()=>{selectedEpc=epcSelect.value;selectionInitialized=true;const choice=tagChoices.get(selectedEpc);updateTagDetails(choice?{...choice,count:choice.count}:null);update();syncTagSelectionButtons();});
 epcSelect.addEventListener('blur',()=>{if(tagOptionsDirty)updateTagOptions(true);});
 function el(tag,text,className){const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(className)n.className=className;return n;}
 function findEpcs(value){
@@ -78,7 +79,7 @@ function renderEvents(events){
   display.push(...grouped.values());
   display.sort((a,b)=>Date.parse(b.event.receivedAt)-Date.parse(a.event.receivedAt));
   if(!display.length){feedList.append(el('p','ยังไม่มีข้อมูล EPC ในช่วง 5 วินาทีล่าสุด','empty'));if(selectedEpc&&tagChoices.has(selectedEpc))updateTagDetails(tagChoices.get(selectedEpc));else updateTagDetails(null);return;}
-  const selected=display.find(item=>item.epc===selectedEpc)||tagChoices.get(selectedEpc)||display[0];selectedEpc=selected.epc;updateTagOptions();updateTagDetails(selected);
+  const selected=selectedEpc?(display.find(item=>item.epc===selectedEpc)||tagChoices.get(selectedEpc)):!selectionInitialized?display[0]:null;if(selected){selectedEpc=selected.epc;selectionInitialized=true;updateTagOptions();$('epc').value=selectedEpc;updateTagDetails(selected);}else{selectedEpc='';updateTagOptions();updateTagDetails(null);}
   for(const item of display){
   const event=item.event;
   const itemRow=el('div',undefined,'eventitem'),card=el('details',undefined,'eventcard'),summary=el('summary');
@@ -86,14 +87,15 @@ function renderEvents(events){
   if(openCards.has(card.dataset.epc||card.dataset.eventId))card.open=true;
   const ascii=epcAscii(item.epc),primary=item.epc?(ascii||item.epc)+' · อ่านพบ '+item.count+' ครั้ง':'Event / สถานะเครื่อง';
   summary.append(el('strong',primary),el('span',new Date(event.receivedAt).toLocaleString('th-TH')+' · #'+event.id));
-  card.append(summary);summary.addEventListener('click',()=>{selectedEpc=item.epc;updateTagOptions();updateTagDetails(item);});
+  card.append(summary);summary.addEventListener('click',()=>{selectedEpc=item.epc;selectionInitialized=true;updateTagOptions(true);$('epc').value=item.epc;updateTagDetails(item);update();syncTagSelectionButtons();});
   if(item.epc)card.append(memorySummary(event.payload,item.epc,item.count,event.receivedAt));
   const table=el('table'),tbody=el('tbody');
   for(const [key,value] of fields(event.payload)){const tr=el('tr');tr.append(el('th',key),el('td',value));tbody.append(tr);}table.append(tbody);
   const raw=el('details',undefined,'technical'),rawLabel=el('summary','ข้อมูลดิบสำหรับตรวจสอบ · ทุกฟิลด์และ JSON');raw.dataset.rawKey=item.epc?'raw-'+item.epc:'raw-event-'+event.id;raw.append(rawLabel,table,el('pre',JSON.stringify(event.payload,null,2)));card.append(raw);for(const detail of card.querySelectorAll('details[data-raw-key]'))detail.open=openRaw.has(detail.dataset.rawKey);itemRow.append(card);
-  if(item.epc){const action=el('div',undefined,'tagAction'),state=userReadStatus(event.payload,item.epc),badge=el('span',state.label,'tagCapability '+state.key),button=el('button','เลือกแท็กนี้เพื่อเขียน');button.type='button';button.className='chooseTag';button.setAttribute('aria-label','เลือก EPC '+item.epc+' ในฟอร์มเขียน');button.onclick=()=>{selectedEpc=item.epc;updateTagOptions(true);$('epc').value=item.epc;updateTagDetails(tagChoices.get(item.epc)||item);update();$('writer').scrollIntoView({behavior:'smooth',block:'start'});$('epc').focus({preventScroll:true});};action.append(badge,button);itemRow.append(action);}
+  if(item.epc){const action=el('div',undefined,'tagAction'),state=userReadStatus(event.payload,item.epc),badge=el('span',state.label,'tagCapability '+state.key),button=el('button');button.type='button';button.className='chooseTag';button.dataset.epc=item.epc;button.onclick=event=>{event.stopPropagation();if(selectedEpc===item.epc){selectedEpc='';selectionInitialized=true;updateTagOptions(true);$('epc').value='';updateTagDetails(null);update();syncTagSelectionButtons();return;}selectedEpc=item.epc;selectionInitialized=true;updateTagOptions(true);$('epc').value=item.epc;updateTagDetails(tagChoices.get(item.epc)||item);update();syncTagSelectionButtons();$('writer').scrollIntoView({behavior:'smooth',block:'start'});$('epc').focus({preventScroll:true});};action.append(badge,button);itemRow.append(action);}
   feedList.append(itemRow);
  }
+ syncTagSelectionButtons();
 }
 function readSummary(events){const epcs=new Set();let reads=0;for(const event of events){const values=findEpcs(event.payload);reads+=values.length;for(const epc of values)epcs.add(epc);}return epcs.size+' แท็กไม่ซ้ำ · '+reads+' ครั้งที่อ่าน';}
 async function loadEvents(before=null,manual=false){

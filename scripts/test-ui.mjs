@@ -140,8 +140,11 @@ test('tags are separated by observed USER read capability in cards, dropdown, an
   a.doc.getElementById('epc').value=epc2;a.doc.getElementById('epc').dispatchEvent(new a.dom.window.Event('change'));assert.match(a.doc.getElementById('userCapability').textContent,/Memory overrun/);assert.match(a.doc.getElementById('userCapability').textContent,/ยังยืนยันการเขียนไม่ได้/);
  }finally{a.close();}
 });
-test('tag card has a direct select-for-writing action and keeps dropdown in sync',async()=>{
- const a=await setup([event(2,'CCDD'),event(1,'AABB')]);try{const button=[...a.doc.querySelectorAll('.chooseTag')].find(node=>node.getAttribute('aria-label')==='เลือก EPC CCDD ในฟอร์มเขียน');assert.ok(button);button.click();assert.equal(a.doc.getElementById('epc').value,'CCDD');assert.match(a.doc.getElementById('tagDetails').textContent,/EPC · CCDD/);assert.equal(a.doc.querySelectorAll('#epc option').length,3);}finally{a.close();}
+test('tag card selection toggles on and off and stays cleared during live updates',async()=>{
+ const a=await setup([event(2,'CCDD'),event(1,'AABB')]);try{const button=[...a.doc.querySelectorAll('.chooseTag')].find(node=>node.getAttribute('aria-label')==='เลือก EPC CCDD ในฟอร์มเขียน');assert.ok(button);button.click();assert.equal(a.doc.getElementById('epc').value,'CCDD');assert.equal(button.getAttribute('aria-pressed'),'true');assert.match(button.textContent,/เลือกอยู่ · แตะเพื่อยกเลิก/);assert.match(a.doc.getElementById('tagDetails').textContent,/EPC · CCDD/);assert.equal(a.doc.querySelectorAll('#epc option').length,3);
+  button.click();assert.equal(a.doc.getElementById('epc').value,'');assert.equal(button.getAttribute('aria-pressed'),'false');assert.match(a.doc.getElementById('tagDetails').textContent,/ยังไม่พบแท็ก/);
+  a.state.live=[event(3,'EEFF')];await a.tick(500);assert.equal(a.doc.getElementById('epc').value,'');assert.equal(a.doc.querySelector('.chooseTag.selected'),null);
+ }finally{a.close();}
 });
 test('empty and stale initial responses render an explicit empty state',async()=>{
  for(const events of [[],[event(1,'AABB',6000)]]){const a=await setup(events);try{assert.match(a.doc.getElementById('eventList').textContent,/ไม่พบแท็ก/);assert.equal(a.doc.querySelectorAll('.eventcard').length,0);}finally{a.close();}}
