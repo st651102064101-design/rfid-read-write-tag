@@ -22,7 +22,7 @@ function rememberTags(events){
 function updateTagOptions(force=false){
  const select=$('epc');if(!select)return;if(!force&&document.activeElement===select){tagOptionsDirty=true;return;}
  const choices=[...tagChoices.values()].sort((a,b)=>Date.parse(b.lastAt)-Date.parse(a.lastAt)).slice(0,50);select.replaceChildren(new Option('เลือก EPC จากแท็กที่อ่านพบ ('+choices.length+')',''));
- for(const choice of choices){const status=userReadStatus(choice.event?.payload,choice.epc),ascii=epcAscii(choice.epc),name=ascii?'ASCII '+ascii+' · EPC '+choice.epc:choice.epc;const option=new Option(name+' · '+status.label+' · อ่านพบ '+choice.count+' ครั้ง',choice.epc);select.add(option);}
+ for(const choice of choices){const status=userReadStatus(choice.event?.payload,choice.epc),ascii=epcAscii(choice.epc),name=ascii?ascii+' · '+choice.epc:choice.epc;const option=new Option(name+' · '+status.label+' · อ่านพบ '+choice.count+' ครั้ง',choice.epc);select.add(option);}
  select.value=choices.some(choice=>choice.epc===selectedEpc)?selectedEpc:'';tagOptionsDirty=false;
 }
 const epcSelect=$('epc');epcSelect.addEventListener('change',()=>{selectedEpc=epcSelect.value;const choice=tagChoices.get(selectedEpc);updateTagDetails(choice?{...choice,count:choice.count}:null);});
@@ -75,7 +75,7 @@ function renderEvents(events){
   const itemRow=el('div',undefined,'eventitem'),card=el('details',undefined,'eventcard'),summary=el('summary');
   card.dataset.epc=item.epc||'';card.dataset.eventId=String(event.id);
   if(openCards.has(card.dataset.epc||card.dataset.eventId))card.open=true;
-  const ascii=epcAscii(item.epc),primary=item.epc?(ascii?'ASCII '+ascii:item.epc)+' · อ่านพบ '+item.count+' ครั้ง':'Event / สถานะเครื่อง';
+  const ascii=epcAscii(item.epc),primary=item.epc?(ascii||item.epc)+' · อ่านพบ '+item.count+' ครั้ง':'Event / สถานะเครื่อง';
   summary.append(el('strong',primary),el('span',new Date(event.receivedAt).toLocaleString('th-TH')+' · #'+event.id));
   card.append(summary);summary.addEventListener('click',()=>{selectedEpc=item.epc;updateTagOptions();updateTagDetails(item);});
   if(item.epc)card.append(memorySummary(event.payload,item.epc,item.count,event.receivedAt));
