@@ -39,9 +39,12 @@ async function write(b){
  try{
   const makeMode=accesses=>({type:'CUSTOM',antennas:[Number(d.antenna)||1],transmitPower:[original.transmitPower?.[0]||15],query:{session:'S0',target:'A',sel:'NOT_SL'},selects:[{target:'S0',action:'INVA_INVB',...identity}],accesses,radioStopConditions:{antennaCycles:1}});
   const runPhase=async(accesses,minResults,timeoutMs,acceptedEpcs)=>{
-   const started=Date.now();await request('/cloud/stop','PUT',null,auth);changed=true;await request('/cloud/mode','PUT',makeMode(accesses),auth);await request('/cloud/start','PUT',null,auth);
+   await request('/cloud/stop','PUT',null,auth);changed=true;await request('/cloud/mode','PUT',makeMode(accesses),auth);
+   const activeMode=await request('/cloud/mode','GET',null,auth),matches=activeMode.type==='CUSTOM'&&activeMode.accesses?.length===accesses.length&&accesses.every((expected,index)=>activeMode.accesses[index]?.type===expected.type&&Object.entries(expected.config||{}).every(([key,value])=>activeMode.accesses[index]?.config?.[key]===value));
+   if(!matches)throw Error('Reader did not apply the requested access sequence; nothing was written');
+   const queuedEvents=await events();baseline=Math.max(baseline,...queuedEvents.map(event=>Number(event.id)||0));await request('/cloud/start','PUT',null,auth);const started=Date.now();
    while(Date.now()-started<timeoutMs){await delay(350);const incoming=await events(baseline);for(const event of incoming){baseline=Math.max(baseline,Number(event.id));for(const record of readerRecords(event.payload)){
-    const values=recordAccessResults(record),id=recordEpc(record);if(record.type==='CUSTOM'&&Array.isArray(values)&&values.length>=minResults&&acceptedEpcs.includes(id)&&Date.parse(record.timestamp)>=at-1000)return {record,values};
+    const values=recordAccessResults(record),id=recordEpc(record);if(record.type==='CUSTOM'&&Array.isArray(values)&&values.length>=minResults&&acceptedEpcs.includes(id)&&Date.parse(record.timestamp)>=started-250)return {record,values};
    }} }
    throw Error('Timed out waiting for hardware result. Do not repeat without checking the tag.');
   };
