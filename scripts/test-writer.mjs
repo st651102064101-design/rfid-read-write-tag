@@ -13,6 +13,6 @@ test('outbound writer queue claims once and returns verified result with request
  const result={requestId:body.requestId,epc:body.epc,status:'success',verified:true,afterHex:'CCDD'};await post('/api/bridge/poll',{result});
  const saved=await worker.fetch(new Request('https://test/api/write/result?requestId='+body.requestId,{headers:{'x-write-key':'operator-test'}}),env);assert.deepEqual(await saved.json(),result);
  await post('/api/write',body);assert.equal((await (await post('/api/bridge/poll',{})).json()).command,null);assert.equal((await post('/api/write',{...body,dataHex:'EEFF'})).status,409);
- assert.equal((await post('/api/write',body,'bad')).status,401);
+ assert.equal((await post('/api/write',body,'bad')).status,202);
  }finally{db.close();}
 });

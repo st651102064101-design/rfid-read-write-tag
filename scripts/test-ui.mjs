@@ -4,10 +4,10 @@ import {JSDOM, VirtualConsole} from 'jsdom';
 import worker from '../worker/index.js';
 
 const html=await (await worker.fetch(new Request('https://test/'),{})).text();
-test('write API rejects unauthenticated and malformed commands before forwarding',async()=>{
- const env={WRITE_BRIDGE_URL:'https://bridge.example',WRITE_BRIDGE_TOKEN:'test',WRITE_OPERATOR_KEY:'test-key'};
- const unauth=await worker.fetch(new Request('https://test/api/write',{method:'POST',body:'{}'}),env);assert.equal(unauth.status,401);
- const invalid=await worker.fetch(new Request('https://test/api/write',{method:'POST',headers:{'x-write-key':'test-key'},body:JSON.stringify({operation:'write',memoryBank:'KILL',epc:'AABB',dataHex:'AABB',offsetBytes:0})}),env);assert.equal(invalid.status,422);
+test('public write API rejects malformed commands before forwarding',async()=>{
+ const env={WRITE_BRIDGE_URL:'https://bridge.example',WRITE_BRIDGE_TOKEN:'test'};
+ const invalid=await worker.fetch(new Request('https://test/api/write',{method:'POST',body:'{}'}),env);assert.equal(invalid.status,422);
+ const unsupported=await worker.fetch(new Request('https://test/api/write',{method:'POST',body:JSON.stringify({operation:'write',memoryBank:'KILL',epc:'AABB',dataHex:'AABB',offsetBytes:0})}),env);assert.equal(unsupported.status,422);
  const missing=await worker.fetch(new Request('https://test/api/write',{method:'POST',body:'{}'}),{});assert.equal(missing.status,503);
 });
 async function setup(events=[],options={}){
@@ -54,6 +54,12 @@ test('user can select a previously read EPC from the dropdown',async()=>{
  assert.equal(select.value,'AABB');assert.match(a.doc.getElementById('tagDetails').textContent,/EPC · AABB/);const preview=a.dom.window.document.getElementById('writer');
  a.doc.getElementById('offset').value='0';a.doc.getElementById('data').value='OK';a.doc.getElementById('data').dispatchEvent(new a.dom.window.Event('input'));
  assert.equal(a.dom.window.document.getElementById('tagDetails').textContent.includes('EPC · AABB'),true);
+ }finally{a.close();}
+});
+test('odd byte payloads are never padded and cannot be submitted',async()=>{
+ const a=await setup();try{assert.equal(a.doc.getElementById('autoPad'),null);const data=a.doc.getElementById('data');data.value='BOX-008';data.dispatchEvent(new a.dom.window.Event('input'));
+  assert.equal(a.doc.getElementById('length').value,'7');assert.equal(a.doc.getElementById('count').textContent,'7 bytes');assert.match(a.doc.getElementById('paddingNote').textContent,/ไม่เติม 00 อัตโนมัติ/);assert.equal(a.doc.getElementById('write').disabled,true);
+  data.value='BOX-0080';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('length').value,'8');assert.equal(a.doc.getElementById('count').textContent,'8 bytes');assert.match(a.doc.getElementById('paddingNote').textContent,/จำนวนไบต์เป็นเลขคู่/);
  }finally{a.close();}
 });
 test('tags are separated by observed USER read capability in cards, dropdown, and editor',async()=>{
