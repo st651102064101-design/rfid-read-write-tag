@@ -4,6 +4,12 @@ import {JSDOM, VirtualConsole} from 'jsdom';
 import worker from '../worker/index.js';
 
 const html=await (await worker.fetch(new Request('https://test/'),{})).text();
+test('write API rejects unauthenticated and malformed commands before forwarding',async()=>{
+ const env={WRITE_BRIDGE_URL:'https://bridge.example',WRITE_BRIDGE_TOKEN:'test',WRITE_OPERATOR_KEY:'test-key'};
+ const unauth=await worker.fetch(new Request('https://test/api/write',{method:'POST',body:'{}'}),env);assert.equal(unauth.status,401);
+ const invalid=await worker.fetch(new Request('https://test/api/write',{method:'POST',headers:{'x-write-key':'test-key'},body:JSON.stringify({operation:'write',memoryBank:'KILL',epc:'AABB',dataHex:'AABB',offsetBytes:0})}),env);assert.equal(invalid.status,422);
+ const missing=await worker.fetch(new Request('https://test/api/write',{method:'POST',body:'{}'}),{});assert.equal(missing.status,503);
+});
 async function setup(events=[],options={}){
  let now=Date.now();const errors=[],calls=[],timers=[];
  const state={events,live:[],readers:[],fail:false,...options};
@@ -20,6 +26,11 @@ async function setup(events=[],options={}){
  return {dom,state,errors,calls,timers,doc:dom.window.document,advance:ms=>{now+=ms;},async tick(delay){for(const t of timers.filter(t=>t.delay===delay))t.fn();await new Promise(resolve=>setImmediate(resolve));},close(){dom.window.close();}};
 }
 const event=(id,epc='AABB',age=0)=>({id,receivedAt:new Date(Date.now()-age).toISOString(),payload:{tag_reads:[{epc,isHeartBeat:'false'}]}});
+test('verified CUSTOM reader profile maps banks without confusing other readers',async()=>{
+ const epc='0000000000424F582D303037';const e=event(1,epc);e.payload=[{type:'CUSTOM',timestamp:'2026-10-01T05:42:00Z',data:{idHex:epc,MAC:'C4:7D:CC:74:AF:20',accessResults:['80e23000'+epc,'e280689420005026ce01a477','0000000000000000','Error: tag returned error code 0x03 = Memory overrun']}}];
+ const a=await setup([e]);try{const panel=a.doc.getElementById('tagDetails');assert.match(panel.querySelector('[data-memory="EPC"]').textContent,/128 bits/);assert.match(panel.querySelector('[data-memory="TID"]').textContent,/96 bits/);assert.match(panel.querySelector('[data-memory="RESERVED"]').textContent,/64 bits/);assert.match(panel.querySelector('[data-memory="USER"]').textContent,/อ่านเกินขอบเขต/);}finally{a.close();}
+ e.payload[0].data.MAC='OTHER';const b=await setup([e]);try{assert.match(b.doc.querySelector('#tagDetails [data-memory="RESERVED"]').textContent,/ไม่พบข้อมูล/);}finally{b.close();}
+});
 test('nested reader payload is grouped with readable EPC and actionable memory error; raw data stays collapsed',async()=>{
  const epc='0000000000424F582D303037',e=event(1,epc);e.payload=[{type:'INVENTORY',data:{idHex:epc,USER:'Error: tag returned error code 0x03 = Memory overrun',TID:'e280689420005026ce01a477',antenna:1,PC:'3000',CRC:'80e2',peakRssi:-45}}];
  const a=await setup([e]);try{
@@ -80,3 +91,4 @@ test('right-side tag details read nested Zebra FX9600 data banks and metadata',a
   assert.equal(a.doc.querySelectorAll('#tagDetails .bankraw').length,3);assert.ok([...a.doc.querySelectorAll('#tagDetails .asciiValue code')].some(node=>node.textContent==='HELLO RFID'));assert.match(detail,/ASCII \(7-bit\)/);assert.match(detail,/แทน byte ที่พิมพ์ไม่ได้ด้วย ·/);
  }finally{a.close();}
 });
+

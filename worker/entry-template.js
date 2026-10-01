@@ -39,6 +39,18 @@ async function readBody(request){
 export default {async fetch(request,env){
  const url=new URL(request.url);
  try{
+  if(url.pathname==='/api/write/config'&&request.method==='GET'){
+   if(!env.WRITE_BRIDGE_URL||!env.WRITE_BRIDGE_TOKEN)return json({ok:true,available:false});
+   try{const response=await fetch(env.WRITE_BRIDGE_URL+'/health',{headers:{Authorization:'Bearer '+env.WRITE_BRIDGE_TOKEN,'ngrok-skip-browser-warning':'1'},signal:AbortSignal.timeout(5000)});return json({ok:true,available:response.ok});}catch{return json({ok:true,available:false});}
+  }
+  if(url.pathname==='/api/write'&&request.method==='POST'){
+   if(!env.WRITE_BRIDGE_URL||!env.WRITE_BRIDGE_TOKEN||!env.WRITE_OPERATOR_KEY)return json({error:'Writer bridge is not configured'},503);
+   if(request.headers.get('x-write-key')!==env.WRITE_OPERATOR_KEY)return json({error:'รหัสอนุญาตเขียนไม่ถูกต้อง'},401);
+   const body=await readBody(request);
+   if(!body||body.operation!=='write'||!['USER','EPC','TID','RESERVED'].includes(body.memoryBank)||!/^(?:[0-9a-f]{2})+$/i.test(body.epc||'')||!/^(?:[0-9a-f]{4})+$/i.test(body.dataHex||'')||body.dataHex.length>2048||!Number.isSafeInteger(body.offsetBytes)||body.offsetBytes<0||body.offsetBytes%2)return json({error:'Invalid write request'},422);
+   const response=await fetch(env.WRITE_BRIDGE_URL+'/write',{method:'POST',headers:{Authorization:'Bearer '+env.WRITE_BRIDGE_TOKEN,'Content-Type':'application/json','ngrok-skip-browser-warning':'1'},body:JSON.stringify(body),signal:AbortSignal.timeout(45000)});
+   return new Response(await response.text(),{status:response.status,headers});
+  }
   if(url.pathname==='/rfid/events'){
    if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
    if(request.method==='GET')return json({ok:true,endpoint:'/rfid/events',method:'POST',storage:'enabled'});

@@ -1,0 +1,55 @@
+{
+  "accesses": [
+    {
+      "config": {
+        "membank": "EPC",
+        "wordCount": 0,
+        "wordPointer": 0
+      },
+      "type": "READ"
+    },
+    {
+      "config": {
+        "membank": "TID",
+        "wordCount": 0,
+        "wordPointer": 0
+      },
+      "type": "READ"
+    },
+    {
+      "config": {
+        "membank": "RESERVED",
+        "wordCount": 0,
+        "wordPointer": 0
+      },
+      "type": "READ"
+    },
+    {
+      "config": {
+        "membank": "USER",
+        "wordCount": 0,
+        "wordPointer": 0
+      },
+      "type": "READ"
+    }
+  ],
+  "antennas": [
+    1
+  ],
+  "query": {
+    "session": "S0"
+  },
+  "tagMetaData": [
+    "ANTENNA",
+    "RSSI",
+    "CHANNEL",
+    "PC",
+    "CRC",
+    "MAC",
+    "HOSTNAME"
+  ],
+  "transmitPower": [
+    15.0
+  ],
+  "type": "CUSTOM"
+}
