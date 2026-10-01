@@ -21,7 +21,7 @@ function rememberTags(events){
 function updateTagOptions(force=false){
  const select=$('epc');if(!select)return;if(!force&&document.activeElement===select){tagOptionsDirty=true;return;}
  const choices=[...tagChoices.values()].sort((a,b)=>Date.parse(b.lastAt)-Date.parse(a.lastAt)).slice(0,50);select.replaceChildren(new Option('เลือก EPC จากแท็กที่อ่านพบ ('+choices.length+')',''));
- for(const choice of choices){const option=new Option(choice.epc+' · อ่านพบ '+choice.count+' ครั้ง · '+new Date(choice.lastAt).toLocaleTimeString('th-TH'),choice.epc);select.add(option);}
+ for(const choice of choices){const status=userReadStatus(choice.event?.payload,choice.epc);const option=new Option(choice.epc+' · '+status.label+' · อ่านพบ '+choice.count+' ครั้ง',choice.epc);select.add(option);}
  select.value=choices.some(choice=>choice.epc===selectedEpc)?selectedEpc:'';tagOptionsDirty=false;
 }
 const epcSelect=$('epc');epcSelect.addEventListener('change',()=>{selectedEpc=epcSelect.value;const choice=tagChoices.get(selectedEpc);updateTagDetails(choice?{...choice,count:choice.count}:null);});
@@ -32,6 +32,20 @@ function findEpcs(value){
  while(queue.length){const v=queue.shift();if(!v||typeof v!=='object')continue;
  for(const [k,x] of Object.entries(v)){if(typeof x==='string'&&/^(epc|epcHex|idHex)$/i.test(k)&&/^(?:[0-9a-f]{2})+$/i.test(x)&&!(k==='idHex'&&v.format&&String(v.format).toLowerCase()!=='epc'))found.add(x.toUpperCase());else if(x&&typeof x==='object')queue.push(x);}}
  return [...found];
+}
+function userReadStatus(payload,epc){
+ const queue=Array.isArray(payload)?[...payload]:[payload];let raw,found=false;
+ while(queue.length){const value=queue.shift();if(!value||typeof value!=='object')continue;
+  const data=value.data&&typeof value.data==='object'?value.data:value;
+  const id=String(data.idHex||data.epc||data.epcHex||'').toUpperCase();
+  if(id===epc){if(Object.hasOwn(data,'USER')){raw=data.USER;found=true;}else if(value.type==='CUSTOM'&&data.MAC==='C4:7D:CC:74:AF:20'&&Array.isArray(data.accessResults)&&data.accessResults.length===4){raw=data.accessResults[3];found=true;}}
+  for(const nested of Object.values(value))if(nested&&typeof nested==='object')queue.push(nested);
+ }
+ if(!found)return {key:'unknown',label:'USER ยังไม่ทราบ'};
+ if(typeof raw==='string'&&/^(?:[a-f0-9]{2})+$/i.test(raw.replace(/^0x/i,'')))return {key:'readable',label:'USER อ่านได้'};
+ if(typeof raw==='string'&&/memory overrun/i.test(raw))return {key:'error',label:'USER ตอบ Memory overrun'};
+ if(typeof raw==='string'&&/not supported|unsupported|invalid memory bank/i.test(raw))return {key:'error',label:'แท็กไม่รองรับ USER'};
+ return {key:'error',label:'USER อ่านไม่สำเร็จ'};
 }
 function fields(value,prefix='',out=[]){
  if(value!==null&&typeof value==='object'&&Object.keys(value).length){for(const [k,v] of Object.entries(value))fields(v,prefix?prefix+'.'+k:k,out);}
@@ -65,7 +79,7 @@ function renderEvents(events){
   const table=el('table'),tbody=el('tbody');
   for(const [key,value] of fields(event.payload)){const tr=el('tr');tr.append(el('th',key),el('td',value));tbody.append(tr);}table.append(tbody);
   const raw=el('details',undefined,'technical'),rawLabel=el('summary','ข้อมูลดิบสำหรับตรวจสอบ · ทุกฟิลด์และ JSON');raw.dataset.rawKey=item.epc?'raw-'+item.epc:'raw-event-'+event.id;raw.append(rawLabel,table,el('pre',JSON.stringify(event.payload,null,2)));card.append(raw);for(const detail of card.querySelectorAll('details[data-raw-key]'))detail.open=openRaw.has(detail.dataset.rawKey);itemRow.append(card);
-  if(item.epc){const button=el('button','เลือกแท็กนี้เพื่อเขียน');button.type='button';button.className='chooseTag';button.setAttribute('aria-label','เลือก EPC '+item.epc+' ในฟอร์มเขียน');button.onclick=()=>{selectedEpc=item.epc;updateTagOptions(true);$('epc').value=item.epc;updateTagDetails(tagChoices.get(item.epc)||item);$('writer').scrollIntoView({behavior:'smooth',block:'start'});$('epc').focus({preventScroll:true});};itemRow.append(button);}
+  if(item.epc){const action=el('div',undefined,'tagAction'),state=userReadStatus(event.payload,item.epc),badge=el('span',state.label,'tagCapability '+state.key),button=el('button','เลือกแท็กนี้เพื่อเขียน');button.type='button';button.className='chooseTag';button.setAttribute('aria-label','เลือก EPC '+item.epc+' ในฟอร์มเขียน');button.onclick=()=>{selectedEpc=item.epc;updateTagOptions(true);$('epc').value=item.epc;updateTagDetails(tagChoices.get(item.epc)||item);$('writer').scrollIntoView({behavior:'smooth',block:'start'});$('epc').focus({preventScroll:true});};action.append(badge,button);itemRow.append(action);}
   feedList.append(itemRow);
  }
 }
@@ -132,8 +146,9 @@ pollReaderStatus();setInterval(pollReaderStatus,1000);
 
 function updateTagDetails(item){
  const panel=$('tagDetails');if(!panel)return;
- if(!item){selectedEpc='';if($('epc'))$('epc').value='';panel.replaceChildren(el('p','ยังไม่พบแท็กในช่วง 5 วินาทีล่าสุด · รายละเอียดจะแสดงเมื่อ reader อ่านพบแท็ก','empty'));return;}
+ if(!item){selectedEpc='';if($('epc'))$('epc').value='';if($('userCapability'))$('userCapability').textContent='สถานะ USER จะแสดงเมื่อ reader ส่งผลอ่านของแท็ก';panel.replaceChildren(el('p','ยังไม่พบแท็กในช่วง 5 วินาทีล่าสุด · รายละเอียดจะแสดงเมื่อ reader อ่านพบแท็ก','empty'));return;}
  if($('epc')&&[...$('epc').options].some(option=>option.value===item.epc))$('epc').value=item.epc;
+ const userState=userReadStatus(item.event?.payload,item.epc);if($('userCapability'))$('userCapability').textContent=userState.label+' · เป็นผลการอ่านเท่านั้น ยังยืนยันการเขียนไม่ได้';
  panel.replaceChildren(memorySummary(item.event.payload,item.epc,item.count,item.event.receivedAt));
 }
 function memorySummary(payload,epc,count=1,receivedAt=''){

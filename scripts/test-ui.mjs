@@ -56,6 +56,16 @@ test('user can select a previously read EPC from the dropdown',async()=>{
  assert.equal(a.dom.window.document.getElementById('tagDetails').textContent.includes('EPC · AABB'),true);
  }finally{a.close();}
 });
+test('tags are separated by observed USER read capability in cards, dropdown, and editor',async()=>{
+ const epc1='AABB',epc2='CCDD',epc3='EEFF';
+ const supported=event(1,epc1);supported.payload=[{type:'INVENTORY',data:{idHex:epc1,USER:'4142'}}];
+ const overrun=event(2,epc2);overrun.payload=[{type:'CUSTOM',data:{idHex:epc2,MAC:'C4:7D:CC:74:AF:20',accessResults:['aabb','e280689420005026ce01a477','0000000000000000','Error: tag returned error code 0x03 = Memory overrun']}}];
+ const unknown=event(3,epc3);const a=await setup([supported,overrun,unknown]);try{
+  const options=[...a.doc.querySelectorAll('#epc option')].map(option=>option.textContent);assert.ok(options.some(option=>option.includes('AABB')&&option.includes('USER อ่านได้')));assert.ok(options.some(option=>option.includes('CCDD')&&option.includes('Memory overrun')));assert.ok(options.some(option=>option.includes('EEFF')&&option.includes('USER ยังไม่ทราบ')));
+  const badges=[...a.doc.querySelectorAll('.tagCapability')].map(node=>node.textContent);assert.ok(badges.includes('USER ตอบ Memory overrun'));
+  a.doc.getElementById('epc').value=epc2;a.doc.getElementById('epc').dispatchEvent(new a.dom.window.Event('change'));assert.match(a.doc.getElementById('userCapability').textContent,/Memory overrun/);assert.match(a.doc.getElementById('userCapability').textContent,/ยังยืนยันการเขียนไม่ได้/);
+ }finally{a.close();}
+});
 test('tag card has a direct select-for-writing action and keeps dropdown in sync',async()=>{
  const a=await setup([event(2,'CCDD'),event(1,'AABB')]);try{const button=[...a.doc.querySelectorAll('.chooseTag')].find(node=>node.getAttribute('aria-label')==='เลือก EPC CCDD ในฟอร์มเขียน');assert.ok(button);button.click();assert.equal(a.doc.getElementById('epc').value,'CCDD');assert.match(a.doc.getElementById('tagDetails').textContent,/EPC · CCDD/);assert.equal(a.doc.querySelectorAll('#epc option').length,3);}finally{a.close();}
 });
