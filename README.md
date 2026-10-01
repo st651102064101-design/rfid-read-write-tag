@@ -1,5 +1,9 @@
 # FX9600 RFID Read & Write
 
+Source repository: https://github.com/st651102064101-design/rfid-read-write-tag.git (`origin`, branch `main`). After cloning on Windows, run `pwsh -File scripts/configure-git.ps1` to configure the default push remote and disable Git Credential Manager prompts for the internal Sites Git host in this checkout.
+
+Sites publication uses its own source repository and a short-lived Bearer credential issued by Sites; never enter or save a username/password for `git.chatgpt-team.site`. The publishing workflow supplies that credential without prompting. A GitHub push alone does not publish this Site: the same commit must also be synchronized, built, saved and deployed through Sites. No automatic GitHub-to-Sites deployment is configured.
+
 Public webhook: POST /rfid/events accepts JSON objects or arrays (up to 1 MB). Events and heartbeat metadata are persisted in D1. The dashboard groups duplicate EPCs, expires absent tags, preserves expanded cards, and shows HEX/ASCII, received memory size, reader details and raw payloads.
 
 Hardware writer: the notebook bridge polls POST /api/bridge/poll using a secret token. Operators queue writes through /api/write and retrieve verified results from /api/write/result. No inbound tunnel is required. Keep reader/start-writer.ps1 running on the notebook. Local reader credentials are DPAPI-encrypted under ignored .sites-runtime and must never be committed. Sites secrets are WRITE_BRIDGE_TOKEN and WRITE_OPERATOR_KEY.
