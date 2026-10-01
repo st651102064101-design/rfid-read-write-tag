@@ -71,7 +71,8 @@ test('write input is bounded by observed bank capacity and supports one byte',as
  const a=await setup([writableEvent(1,'AABB','00'.repeat(4))],{writeAvailable:true});try{
   const select=a.doc.getElementById('epc');select.value='AABB';select.dispatchEvent(new a.dom.window.Event('change'));
   const bank=a.doc.getElementById('memoryBank');bank.value='USER';bank.dispatchEvent(new a.dom.window.Event('change'));
-  const data=a.doc.getElementById('data');data.value='ABCDE';data.dispatchEvent(new a.dom.window.Event('input'));
+  const data=a.doc.getElementById('data');data.value='';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('error').textContent,'กรอกข้อมูลอย่างน้อย 1 byte');assert.equal(a.doc.getElementById('paddingNote').textContent,'');assert.equal((a.doc.getElementById('error').textContent+a.doc.getElementById('paddingNote').textContent).match(/กรอกข้อมูลอย่างน้อย 1 byte/g).length,1);
+  data.value='ABCDE';data.dispatchEvent(new a.dom.window.Event('input'));
   assert.equal(a.doc.getElementById('write').disabled,true);assert.equal(data.maxLength,4);assert.match(a.doc.getElementById('error').textContent,/สูงสุด 4 bytes/);
   data.value='A';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('write').disabled,false);assert.match(a.doc.getElementById('count').textContent,/1 \/ 4 bytes/);
   data.value='ABCD';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('write').disabled,false);assert.match(a.doc.getElementById('count').textContent,/4 \/ 4 bytes/);assert.match(a.doc.getElementById('paddingNote').textContent,/วัดได้ 4 bytes/);
