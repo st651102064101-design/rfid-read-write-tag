@@ -20,6 +20,15 @@ async function setup(events=[],options={}){
  return {dom,state,errors,calls,timers,doc:dom.window.document,advance:ms=>{now+=ms;},async tick(delay){for(const t of timers.filter(t=>t.delay===delay))t.fn();await new Promise(resolve=>setImmediate(resolve));},close(){dom.window.close();}};
 }
 const event=(id,epc='AABB',age=0)=>({id,receivedAt:new Date(Date.now()-age).toISOString(),payload:{tag_reads:[{epc,isHeartBeat:'false'}]}});
+test('nested reader payload is grouped with readable EPC and actionable memory error; raw data stays collapsed',async()=>{
+ const epc='0000000000424F582D303037',e=event(1,epc);e.payload=[{type:'INVENTORY',data:{idHex:epc,USER:'Error: tag returned error code 0x03 = Memory overrun',TID:'e280689420005026ce01a477',antenna:1,PC:'3000',CRC:'80e2',peakRssi:-45}}];
+ const a=await setup([e]);try{
+ assert.equal(a.doc.querySelector('.tagText strong').textContent,'BOX-007');assert.match(a.doc.querySelector('[data-memory="USER"]').textContent,/อ่านเกินขอบเขตหน่วยความจำ/);
+ const card=a.doc.querySelector('.eventcard');assert.equal(card.querySelectorAll(':scope > table').length,0);const raw=card.querySelector('[data-raw-key="raw-'+epc+'"]');assert.equal(raw.open,false);assert.match(raw.textContent,/Memory overrun/);
+ card.open=true;raw.open=true;const bank=card.querySelector('[data-bank="EPC"]');bank.open=true;a.state.live=[{...e,id:2}];await a.tick(500);
+ assert.ok(a.doc.querySelector('.eventcard').open);assert.ok(a.doc.querySelector('.eventcard [data-bank="EPC"]').open);assert.ok(a.doc.querySelector('.eventcard [data-raw-key="raw-'+epc+'"]').open);
+ }finally{a.close();}
+});
 test('built page starts without removed webhook controls, shows fresh tags, and groups duplicates',async()=>{
  const a=await setup([event(3),event(2),event(1,'CCDD')]);try{
  assert.equal(a.errors.length,0);assert.equal(a.doc.getElementById('save'),null);

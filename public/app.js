@@ -65,8 +65,8 @@ function renderEvents(events){
   if(item.epc){const button=el('button','ใช้ EPC '+item.epc);button.type='button';button.onclick=()=>{selectedEpc=item.epc;updateTagOptions();updateTagDetails(tagChoices.get(item.epc)||item);$('epc').value=item.epc;$('epc').scrollIntoView({behavior:'smooth',block:'center'});$('epc').focus();};buttons.append(button);}
   card.append(buttons);if(item.epc)card.append(memorySummary(event.payload,item.epc,item.count,event.receivedAt));
   const table=el('table'),tbody=el('tbody');
-  for(const [key,value] of fields(event.payload)){const tr=el('tr');tr.append(el('th',key),el('td',value));tbody.append(tr);}table.append(tbody);card.append(table);
-  const raw=el('details'),rawLabel=el('summary','JSON ต้นฉบับครบทุกฟิลด์');raw.dataset.rawKey=item.epc?'raw-'+item.epc:'raw-event-'+event.id;if(openRaw.has(raw.dataset.rawKey))raw.open=true;raw.append(rawLabel,el('pre',JSON.stringify(event.payload,null,2)));card.append(raw);feedList.append(card);
+  for(const [key,value] of fields(event.payload)){const tr=el('tr');tr.append(el('th',key),el('td',value));tbody.append(tr);}table.append(tbody);
+  const raw=el('details',undefined,'technical'),rawLabel=el('summary','ข้อมูลดิบสำหรับตรวจสอบ · ทุกฟิลด์และ JSON');raw.dataset.rawKey=item.epc?'raw-'+item.epc:'raw-event-'+event.id;raw.append(rawLabel,table,el('pre',JSON.stringify(event.payload,null,2)));card.append(raw);for(const detail of card.querySelectorAll('details[data-raw-key]'))detail.open=openRaw.has(detail.dataset.rawKey);feedList.append(card);
  }
 }
 function readSummary(events){const epcs=new Set();let reads=0;for(const event of events){const values=findEpcs(event.payload);reads+=values.length;for(const epc of values)epcs.add(epc);}return epcs.size+' แท็กไม่ซ้ำ · '+reads+' ครั้งที่อ่าน';}
@@ -151,20 +151,27 @@ function memorySummary(payload,epc,count=1,receivedAt=''){
   return null;
  };
  root.append(el('h3','EPC · '+epc,'tagEpc'),el('small','อ่านพบ '+count+' ครั้ง'+(receivedAt?' · '+new Date(receivedAt).toLocaleString('th-TH'):''),'tagReadTime'));
- const table=el('table'),tbody=el('tbody');
+ const epcText=(asHex(epc)?.match(/../g)||[]).map(pair=>parseInt(pair,16));while(epcText[0]===0)epcText.shift();while(epcText[epcText.length-1]===0)epcText.pop();
+ if(epcText.length&&epcText.every(byte=>byte>=32&&byte<=126)){const hero=el('section',undefined,'tagText');hero.append(el('small','ข้อความจาก EPC · ASCII'),el('strong',epcText.map(byte=>String.fromCharCode(byte)).join('')),el('small','ซ่อนเฉพาะ NUL ต้นและท้ายในข้อความสรุป · ค่าดิบอยู่ด้านล่าง'));root.append(hero);}
+ root.append(el('h4','หน่วยความจำที่อ่านได้','groupTitle'));
+ const banks=el('div',undefined,'memoryCards');
  for(const bank of ['EPC','TID','USER','RESERVED']){
-  const raw=lookup(bank),hex=bank==='EPC'?(asHex(raw)||asHex(epc)):asHex(raw),tr=el('tr');tr.append(el('th',bank));
-  const cell=el('td');
- if(hex){const words=hex.length/4;cell.append(el('strong',(hex.length*4)+' bits · '+(hex.length/2)+' bytes · '+words+' '+(words===1?'word':'words')));const details=el('details',undefined,'bankraw');details.dataset.bank=bank;if(openBanks.has(bank))details.open=true;details.append(el('summary','ดูค่า HEX'));const value=el('code',hex);details.append(value);cell.append(details);}
-  else cell.textContent=raw===undefined?'ไม่พบข้อมูลจาก reader':'มีข้อมูล แต่รูปแบบไม่ใช่ HEX';
+  const raw=lookup(bank),hex=bank==='EPC'?(asHex(raw)||asHex(epc)):asHex(raw),cell=el('section',undefined,'memoryCard');cell.dataset.memory=bank;
+  const header=el('div',undefined,'memoryHead');header.append(el('h5',bank),el('span',hex?'อ่านสำเร็จ':raw===undefined?'ไม่มีข้อมูล':'อ่านไม่สำเร็จ',hex?'bankStatus ok':'bankStatus'));cell.append(header);
+ if(hex){const words=hex.length/4;cell.append(el('strong',(hex.length*4)+' bits · '+(hex.length/2)+' bytes · '+words+' '+(words===1?'word':'words')));const details=el('details',undefined,'bankraw');details.dataset.bank=bank;details.dataset.rawKey=epc+'-'+bank;if(openBanks.has(bank))details.open=true;details.append(el('summary','ดูค่า HEX ต้นฉบับ'));const value=el('code',hex);details.append(value);cell.append(details);}
+  else if(typeof raw==='string'&&/memory overrun/i.test(raw)){cell.classList.add('memoryWarning');cell.append(el('p','อ่านเกินขอบเขตหน่วยความจำ (0x03)'),el('small','ตรวจ Offset และจำนวน words ที่สั่งอ่าน แล้วลองลดช่วงอ่าน · ข้อผิดพลาดนี้ยังยืนยันความจุ USER ไม่ได้'));}
+  else cell.append(el('p',raw===undefined?'ไม่พบข้อมูลจาก reader':String(raw)));
   if(hex){const bytes=hex.match(/../g)||[];const ascii=bytes.map(pair=>{const byte=parseInt(pair,16);return byte>=0x20&&byte<=0x7e?String.fromCharCode(byte):'·';}).join('');const converted=el('div',undefined,'asciiValue');converted.append(el('small','ASCII (7-bit)'),el('code',ascii));cell.append(converted);}
-  tr.append(cell);tbody.append(tr);
+  banks.append(cell);
  }
- table.append(tbody);root.append(table,el('small','คำนวณจากข้อมูลที่ FX9600 ส่งมา ไม่ใช่ความจุสูงสุดของชิป · 1 word = 16 bits = 2 bytes · ASCII แทน byte ที่พิมพ์ไม่ได้ด้วย ·'));
+ root.append(banks,el('small','ขนาดข้อมูลที่ได้รับ ไม่ใช่ความจุสูงสุดของชิป · 1 word = 16 bits = 2 bytes · ASCII แทน byte ที่พิมพ์ไม่ได้ด้วย ·'));
  const meta=el('dl',undefined,'tagMetadata');
- const values=[['PC',lookup('PC')],['CRC',lookup('CRC')],['เสาอากาศ',lookup('antenna')],['RSSI สูงสุด',lookup('peakRssi')],['ช่องความถี่',lookup('channel')],['รูปแบบ',lookup('format')],['เครื่องอ่าน',lookup('hostName')],['Event',lookup('eventNum')]];
+ const technical=el('details',undefined,'technical');technical.dataset.rawKey=epc+'-technical';technical.append(el('summary','ข้อมูลทางเทคนิค · PC / CRC / Event'));const extra=el('dl',undefined,'tagMetadata');
+ const values=[['PC',lookup('PC')],['CRC',lookup('CRC')],['เสาอากาศ',lookup('antenna')],['RSSI สูงสุด',lookup('peakRssi')],['ช่องความถี่',lookup('channel')],['รูปแบบ',lookup('format')],['เครื่องอ่าน',lookup('hostName')],['MAC',lookup('MAC')],['Phase',lookup('phase')],['Event',lookup('eventNum')]];
  for(const [label,value] of values)if(value!==undefined){let shown=String(value);if(label==='PC'||label==='CRC'){const hex=asHex(value);if(hex)shown='0x'+hex+' · '+(hex.length*4)+' bits · '+(hex.length/4)+' words';}else if(label==='RSSI สูงสุด')shown+=' dBm';else if(label==='ช่องความถี่')shown+=' MHz';const item=el('div',undefined,'tagMetric');item.append(el('dt',label),el('dd',shown));meta.append(item);}
- if(meta.childElementCount)root.append(meta);
+ for(const item of [...meta.children])if(['PC','CRC','รูปแบบ','Phase','Event'].includes(item.querySelector('dt').textContent))extra.append(item);
+ if(meta.childElementCount)root.append(el('h4','สัญญาณและเครื่องอ่าน','groupTitle'),meta);
+ if(extra.childElementCount){technical.append(extra);root.append(technical);}
  return root;
 }
 $('memoryBank').addEventListener('change',()=>{
