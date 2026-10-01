@@ -40,16 +40,32 @@ export default {async fetch(request,env){
  const url=new URL(request.url);
  try{
   if(url.pathname==='/api/write/config'&&request.method==='GET'){
-   if(!env.WRITE_BRIDGE_URL||!env.WRITE_BRIDGE_TOKEN)return json({ok:true,available:false});
-   try{const response=await fetch(env.WRITE_BRIDGE_URL+'/health',{headers:{Authorization:'Bearer '+env.WRITE_BRIDGE_TOKEN,'ngrok-skip-browser-warning':'1'},signal:AbortSignal.timeout(5000)});return json({ok:true,available:response.ok});}catch{return json({ok:true,available:false});}
+   if(!env.WRITE_BRIDGE_TOKEN||!env.WRITE_OPERATOR_KEY)return json({ok:true,available:false});
+   const {results}=await database(env).prepare('SELECT last_seen FROM writer_bridge WHERE id=1').all();return json({ok:true,available:!!results[0]&&Date.now()-Date.parse(results[0].last_seen)<60000});
+  }
+  if(url.pathname==='/api/bridge/poll'&&request.method==='POST'){
+   if(!env.WRITE_BRIDGE_TOKEN||request.headers.get('authorization')!=='Bearer '+env.WRITE_BRIDGE_TOKEN)return json({error:'Unauthorized'},401);
+   const body=await readBody(request),db=database(env),now=new Date().toISOString();
+   await db.prepare('INSERT INTO writer_bridge (id,last_seen) VALUES (1,?) ON CONFLICT(id) DO UPDATE SET last_seen=excluded.last_seen').bind(now).run();
+   if(body.result&&['success','failed','unknown'].includes(body.result.status))await db.prepare("UPDATE writer_commands SET status=?,result=? WHERE request_id=? AND status='running'").bind(body.result.status,JSON.stringify(body.result),body.result.requestId).run();
+   const {results}=await db.prepare("UPDATE writer_commands SET status='running' WHERE request_id=(SELECT request_id FROM writer_commands WHERE status='queued' AND created_at>? ORDER BY created_at LIMIT 1) AND status='queued' RETURNING payload").bind(new Date(Date.now()-30000).toISOString()).all();
+   return json({ok:true,command:results[0]?JSON.parse(results[0].payload):null});
+  }
+  if(url.pathname==='/api/write/result'&&request.method==='GET'){
+   if(!env.WRITE_OPERATOR_KEY||request.headers.get('x-write-key')!==env.WRITE_OPERATOR_KEY)return json({error:'Unauthorized'},401);
+   const {results}=await database(env).prepare('SELECT * FROM writer_commands WHERE request_id=?').bind(url.searchParams.get('requestId')||'').all();const row=results[0];if(!row)return json({error:'Request not found'},404);
+   if(row.result)return json(JSON.parse(row.result));const p=JSON.parse(row.payload);return json({requestId:row.request_id,epc:p.epc,status:Date.now()-Date.parse(row.created_at)>45000?'unknown':row.status,verified:false});
   }
   if(url.pathname==='/api/write'&&request.method==='POST'){
-   if(!env.WRITE_BRIDGE_URL||!env.WRITE_BRIDGE_TOKEN||!env.WRITE_OPERATOR_KEY)return json({error:'Writer bridge is not configured'},503);
+   if(!env.WRITE_BRIDGE_TOKEN||!env.WRITE_OPERATOR_KEY)return json({error:'Writer bridge is not configured'},503);
    if(request.headers.get('x-write-key')!==env.WRITE_OPERATOR_KEY)return json({error:'รหัสอนุญาตเขียนไม่ถูกต้อง'},401);
    const body=await readBody(request);
    if(!body||body.operation!=='write'||!['USER','EPC','TID','RESERVED'].includes(body.memoryBank)||!/^(?:[0-9a-f]{2})+$/i.test(body.epc||'')||!/^(?:[0-9a-f]{4})+$/i.test(body.dataHex||'')||body.dataHex.length>2048||!Number.isSafeInteger(body.offsetBytes)||body.offsetBytes<0||body.offsetBytes%2)return json({error:'Invalid write request'},422);
-   const response=await fetch(env.WRITE_BRIDGE_URL+'/write',{method:'POST',headers:{Authorization:'Bearer '+env.WRITE_BRIDGE_TOKEN,'Content-Type':'application/json','ngrok-skip-browser-warning':'1'},body:JSON.stringify(body),signal:AbortSignal.timeout(45000)});
-   return new Response(await response.text(),{status:response.status,headers});
+   if(!/^[a-z0-9-]{8,80}$/i.test(body.requestId||''))return json({error:'Invalid request ID'},422);
+   const db=database(env),saved=JSON.stringify(body);const {results:existing}=await db.prepare('SELECT payload FROM writer_commands WHERE request_id=?').bind(body.requestId).all();
+   if(existing[0]&&existing[0].payload!==saved)return json({error:'Request ID already used'},409);
+   await db.prepare("INSERT INTO writer_commands (request_id,created_at,status,payload) VALUES (?,?,'queued',?) ON CONFLICT(request_id) DO NOTHING").bind(body.requestId,new Date().toISOString(),saved).run();
+   return json({requestId:body.requestId,epc:body.epc,status:'queued'},202);
   }
   if(url.pathname==='/rfid/events'){
    if(request.method==='OPTIONS')return new Response(null,{status:204,headers});

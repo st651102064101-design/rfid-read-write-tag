@@ -63,3 +63,14 @@ const server=http.createServer(async(req,res)=>{
  if(completed.has(b.requestId))return send(200,completed.get(b.requestId));if(busy)return send(409,{error:'Reader busy'});busy=true;
  try{const result=await write(b);completed.set(b.requestId,result);send(200,result);}catch{const result={requestId:b.requestId,epc:b.epc,status:'unknown',verified:false,message:'Bridge could not confirm the operation. Check tag and reader before retrying.'};completed.set(b.requestId,result);send(200,result);}finally{busy=false;}
 });server.listen(5051,'127.0.0.1',()=>console.log('FX9600 writer bridge listening on localhost:5051'));
+// Outbound polling: no public tunnel or inbound network port is required.
+let pendingResult=null;
+async function poll(){
+ if(busy)return;
+ try{
+  const response=await fetch(site+'/api/bridge/poll',{method:'POST',headers:{Authorization:'Bearer '+config.token,'Content-Type':'application/json'},body:JSON.stringify({result:pendingResult}),signal:AbortSignal.timeout(8000)});
+  if(!response.ok)return;const data=await response.json();pendingResult=null;
+  if(data.command){const b=data.command;busy=true;try{pendingResult=completed.get(b.requestId)||await write(b);completed.set(b.requestId,pendingResult);}catch{pendingResult={requestId:b.requestId,epc:b.epc,status:'unknown',verified:false,message:'Hardware result not confirmed. Check tag before retrying.'};completed.set(b.requestId,pendingResult);}finally{busy=false;}}
+ }catch{/* Keep pending result and retry delivering it; never repeat the write. */}
+}
+setInterval(poll,1000);poll();

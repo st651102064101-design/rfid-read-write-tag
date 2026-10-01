@@ -11,3 +11,14 @@ export const readerHeartbeats = sqliteTable('reader_heartbeats', {
   previousAt: text('previous_at'),
   payload: text('payload').notNull(),
 });
+export const writerCommands = sqliteTable('writer_commands', {
+ requestId: text('request_id').primaryKey(),
+ createdAt: text('created_at').notNull(),
+ status: text('status').notNull(),
+ payload: text('payload').notNull(),
+ result: text('result'),
+});
+export const writerBridge = sqliteTable('writer_bridge', {
+ id: integer('id').primaryKey(),
+ lastSeen: text('last_seen').notNull(),
+});
