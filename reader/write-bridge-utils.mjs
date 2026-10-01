@@ -31,6 +31,14 @@ export function chunkWordAccess({dataHex,wordPointer,maxWords=MAX_WORDS_PER_ACCE
  return chunks;
 }
 
+export function accessSequenceMatches(actual,expected){
+ if(!Array.isArray(actual)||!Array.isArray(expected)||actual.length!==expected.length)return false;
+ return expected.every((operation,index)=>actual[index]?.type===operation.type&&Object.entries(operation.config||{}).every(([key,value])=>{
+  const received=actual[index]?.config?.[key];
+  return ['data','password'].includes(key)&&typeof received==='string'&&typeof value==='string'?received.toUpperCase()===value.toUpperCase():received===value;
+ }));
+}
+
 export function adjacentWordFromRead(request,readHex,knownBankHex){
  const read=String(readHex||'').toUpperCase(),bank=String(knownBankHex||'').toUpperCase();
  if(/^[0-9A-F]{4}$/.test(read))return read;

@@ -4,7 +4,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';
 import worker from '../worker/index.js';
 import {readerRecords,recordEpc,recordAccessResults} from '../reader/write-bridge-utils.mjs';
-import {adjacentWordFromRead,buildWordWritePlan,chunkWordAccess,writeResultVerified,writeWaitTimeoutMs} from '../reader/write-bridge-utils.mjs';
+import {accessSequenceMatches,adjacentWordFromRead,buildWordWritePlan,chunkWordAccess,writeResultVerified,writeWaitTimeoutMs} from '../reader/write-bridge-utils.mjs';
 test('bridge finds FX9600 records and write results inside nested webhook payloads',()=>{
  const epc='0000000000424F582D303037',payload={envelope:{events:[{type:'CUSTOM',timestamp:'2026-10-01T07:00:00Z',data:{idHex:epc,accessResults:['AA','success','BB']}}]}};
  const records=readerRecords(payload);assert.equal(records.length,1);assert.equal(recordEpc(records[0]),epc);assert.deepEqual(recordAccessResults(records[0]),['AA','success','BB']);
@@ -23,6 +23,11 @@ test('large writes are split into reader-sized word operations with matching poi
  const chunks=chunkWordAccess({dataHex:'A'.repeat(66*2),wordPointer:12});
  assert.deepEqual(chunks.map(({wordPointer,wordCount})=>({wordPointer,wordCount})),[{wordPointer:12,wordCount:32},{wordPointer:44,wordCount:1}]);
  assert.equal(chunks.map(chunk=>chunk.dataHex).join(''),'A'.repeat(132));
+});
+test('reader mode verification accepts normalized HEX while requiring the requested access sequence',()=>{
+ const expected=[{type:'WRITE',config:{membank:'USER',wordPointer:0,data:'5A62'}},{type:'READ',config:{membank:'USER',wordPointer:0,wordCount:1}}];
+ assert.equal(accessSequenceMatches([{type:'WRITE',config:{membank:'USER',wordPointer:0,data:'5a62'}},{type:'READ',config:{membank:'USER',wordPointer:0,wordCount:1}}],expected),true);
+ assert.equal(accessSequenceMatches([{type:'READ',config:{membank:'USER',wordPointer:0,wordCount:1}}],expected),false);
 });
 test('even byte writes use exact payload and larger writes wait longer',()=>{
  const request={lengthBytes:4,dataHex:'41424344'},before='1122334455667788',plan=buildWordWritePlan(request,before);

@@ -2,7 +2,7 @@ import http from 'node:http';
 import https from 'node:https';
 import {createInterface} from 'node:readline';
 import {timingSafeEqual} from 'node:crypto';
-import {readerRecords,recordEpc,recordAccessResults,adjacentWordFromRead,buildWordWritePlan,chunkWordAccess,writeResultVerified,writeWaitTimeoutMs} from './write-bridge-utils.mjs';
+import {readerRecords,recordEpc,recordAccessResults,accessSequenceMatches,adjacentWordFromRead,buildWordWritePlan,chunkWordAccess,writeResultVerified,writeWaitTimeoutMs} from './write-bridge-utils.mjs';
 // Read secrets from hidden stdin, never source or command-line arguments.
 if(process.stdin.isTTY)process.stdin.setRawMode(true);
 const input=createInterface({input:process.stdin,terminal:false});
@@ -40,7 +40,7 @@ async function write(b){
   const makeMode=accesses=>({type:'CUSTOM',antennas:[Number(d.antenna)||1],transmitPower:[original.transmitPower?.[0]||15],query:{session:'S0',target:'A',sel:'NOT_SL'},selects:[{target:'S0',action:'INVA_INVB',...identity}],accesses,radioStopConditions:{antennaCycles:1}});
   const runPhase=async(accesses,minResults,timeoutMs,acceptedEpcs)=>{
    await request('/cloud/stop','PUT',null,auth);changed=true;await request('/cloud/mode','PUT',makeMode(accesses),auth);
-   const activeMode=await request('/cloud/mode','GET',null,auth),matches=activeMode.type==='CUSTOM'&&activeMode.accesses?.length===accesses.length&&accesses.every((expected,index)=>activeMode.accesses[index]?.type===expected.type&&Object.entries(expected.config||{}).every(([key,value])=>activeMode.accesses[index]?.config?.[key]===value));
+   const activeMode=await request('/cloud/mode','GET',null,auth),matches=activeMode.type==='CUSTOM'&&accessSequenceMatches(activeMode.accesses,accesses);
    if(!matches)throw Error('Reader did not apply the requested access sequence; nothing was written');
    const queuedEvents=await events();baseline=Math.max(baseline,...queuedEvents.map(event=>Number(event.id)||0));await request('/cloud/start','PUT',null,auth);const started=Date.now();
    while(Date.now()-started<timeoutMs){await delay(350);const incoming=await events(baseline);for(const event of incoming){baseline=Math.max(baseline,Number(event.id));for(const record of readerRecords(event.payload)){
