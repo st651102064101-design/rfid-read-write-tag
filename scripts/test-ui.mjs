@@ -148,14 +148,14 @@ test('tag card selection toggles on and off and stays cleared during live update
   a.state.live=[event(3,'EEFF')];await a.tick(500);assert.equal(a.doc.getElementById('epc').value,'');assert.equal(a.doc.querySelector('.chooseTag.selected'),null);
  }finally{a.close();}
 });
-test('tag search survives live updates and the selected tag shortcut focuses the editor',async()=>{
+test('filter modal searches live tags and closes back to its trigger',async()=>{
  const a=await setup([event(2,'0000424F582D303037'),event(1,'CCDD')]);try{
   const search=a.doc.getElementById('tagSearch');search.value='BOX-007';search.dispatchEvent(new a.dom.window.Event('input'));
   assert.equal([...a.doc.querySelectorAll('.eventitem')].filter(row=>!row.hidden).length,1);
   a.state.live=[event(3,'EEFF')];await a.tick(500);assert.equal([...a.doc.querySelectorAll('.eventitem')].filter(row=>!row.hidden).length,1);
   search.value='missing';search.dispatchEvent(new a.dom.window.Event('input'));assert.match(a.doc.getElementById('searchStatus').textContent,/ไม่พบแท็ก/);
   search.value='';search.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('searchStatus').hidden,true);
-  let scrolled=false;a.doc.getElementById('writer').scrollIntoView=()=>{scrolled=true;};a.doc.getElementById('goWrite').click();assert.equal(scrolled,true);assert.equal(a.doc.activeElement,a.doc.getElementById('data'));
+  a.doc.getElementById('openTagFilter').click();assert.ok(a.doc.getElementById('tagFilterDialog').hasAttribute('open'));a.doc.getElementById('applyTagFilter').click();assert.equal(a.doc.getElementById('tagFilterDialog').hasAttribute('open'),false);assert.equal(a.doc.activeElement,a.doc.getElementById('openTagFilter'));
  }finally{a.close();}
 });
 test('empty and stale initial responses render an explicit empty state',async()=>{
@@ -194,3 +194,5 @@ test('right-side tag details read nested Zebra FX9600 data banks and metadata',a
  }finally{a.close();}
 });
 
+
+test('USER filters separate readable, overrun and unknown results without declaring chip support',async()=>{const overrun=event(2,'CCDD');overrun.payload=[{type:'INVENTORY',data:{idHex:'CCDD',USER:'Error: Memory overrun'}}];const a=await setup([writableEvent(1),overrun,event(3,'EEFF')]);try{assert.equal(a.doc.querySelector('[data-filter-count=all]').textContent,'3');const filter=a.doc.querySelector('[name=tagGroup][value=readable]');filter.checked=true;filter.dispatchEvent(new a.dom.window.Event('change'));assert.equal([...a.doc.querySelectorAll('.eventitem')].filter(row=>!row.hidden).length,1);assert.equal(a.doc.querySelector('[data-filter-count=overrun]').textContent,'1');a.doc.getElementById('resetTagFilter').click();assert.equal([...a.doc.querySelectorAll('.eventitem')].filter(row=>!row.hidden).length,3);assert.ok([...a.doc.querySelectorAll('.chooseTag')].every(button=>button.hidden));}finally{a.close();}});
