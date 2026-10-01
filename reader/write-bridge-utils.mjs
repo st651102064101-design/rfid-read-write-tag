@@ -31,6 +31,14 @@ export function chunkWordAccess({dataHex,wordPointer,maxWords=MAX_WORDS_PER_ACCE
  return chunks;
 }
 
+export function adjacentWordFromRead(request,readHex,knownBankHex){
+ const read=String(readHex||'').toUpperCase(),bank=String(knownBankHex||'').toUpperCase();
+ if(/^[0-9A-F]{4}$/.test(read))return read;
+ const bankWordOffset=request.offsetBytes+request.lengthBytes-1;
+ if(/^(?:[0-9A-F]{4})+$/.test(read)&&read===bank&&read.length/2>=bankWordOffset+2)return read.slice(bankWordOffset*2,(bankWordOffset+2)*2);
+ return null;
+}
+
 export function buildWordWritePlan(request,beforeHex){
  const dataHex=String(request.dataHex||'').toUpperCase(),before=String(beforeHex||'').toUpperCase();
  if(!/^(?:[0-9A-F]{2})+$/.test(dataHex)||dataHex.length!==request.lengthBytes*2)throw Error('Invalid byte payload');

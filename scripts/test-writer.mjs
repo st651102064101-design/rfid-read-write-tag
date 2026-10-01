@@ -4,18 +4,20 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';
 import worker from '../worker/index.js';
 import {readerRecords,recordEpc,recordAccessResults} from '../reader/write-bridge-utils.mjs';
-import {buildWordWritePlan,chunkWordAccess,writeResultVerified,writeWaitTimeoutMs} from '../reader/write-bridge-utils.mjs';
+import {adjacentWordFromRead,buildWordWritePlan,chunkWordAccess,writeResultVerified,writeWaitTimeoutMs} from '../reader/write-bridge-utils.mjs';
 test('bridge finds FX9600 records and write results inside nested webhook payloads',()=>{
  const epc='0000000000424F582D303037',payload={envelope:{events:[{type:'CUSTOM',timestamp:'2026-10-01T07:00:00Z',data:{idHex:epc,accessResults:['AA','success','BB']}}]}};
  const records=readerRecords(payload);assert.equal(records.length,1);assert.equal(recordEpc(records[0]),epc);assert.deepEqual(recordAccessResults(records[0]),['AA','success','BB']);
 });
 test('odd byte writes preserve the adjacent byte without padding and verify both bytes',()=>{
- const request={lengthBytes:3,dataHex:'414243'},before='3344',plan=buildWordWritePlan(request,before);
+ const request={offsetBytes:0,lengthBytes:3,dataHex:'414243'},before='3344',plan=buildWordWritePlan(request,before);
  assert.equal(plan.wordCount,2);assert.equal(plan.writeHex,'41424344');
  assert.equal(writeResultVerified(request,plan,before,'success','41424344'),true);
  assert.equal(writeResultVerified(request,plan,before,'success','41424300'),false);
  assert.equal(writeResultVerified(request,plan,before,'success','41424444'),false);
  assert.throws(()=>buildWordWritePlan(request,'112233'),/adjacent tag word/);
+ assert.equal(adjacentWordFromRead(request,'3344','1122334455667788'),'3344');
+ assert.equal(adjacentWordFromRead(request,'1122334455667788','1122334455667788'),'3344');
 });
 test('large writes are split into reader-sized word operations with matching pointers',()=>{
  const chunks=chunkWordAccess({dataHex:'A'.repeat(66*2),wordPointer:12});

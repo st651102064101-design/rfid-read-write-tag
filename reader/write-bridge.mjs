@@ -2,7 +2,7 @@ import http from 'node:http';
 import https from 'node:https';
 import {createInterface} from 'node:readline';
 import {timingSafeEqual} from 'node:crypto';
-import {readerRecords,recordEpc,recordAccessResults,buildWordWritePlan,chunkWordAccess,writeResultVerified,writeWaitTimeoutMs} from './write-bridge-utils.mjs';
+import {readerRecords,recordEpc,recordAccessResults,adjacentWordFromRead,buildWordWritePlan,chunkWordAccess,writeResultVerified,writeWaitTimeoutMs} from './write-bridge-utils.mjs';
 // Read secrets from hidden stdin, never source or command-line arguments.
 if(process.stdin.isTTY)process.stdin.setRawMode(true);
 const input=createInterface({input:process.stdin,terminal:false});
@@ -47,7 +47,7 @@ async function write(b){
   };
   const newEpc=b.memoryBank==='EPC'?epc.slice(0,(b.offsetBytes-4)*2)+b.dataHex.toUpperCase()+epc.slice((b.offsetBytes-4+b.lengthBytes)*2):epc;
   const acceptedEpcs=[epc,newEpc];let before;
-  if(b.lengthBytes%2){const readAccesses=[];if(b.accessPassword)readAccesses.push({type:'ACCESS',config:{password:b.accessPassword}});readAccesses.push({type:'READ',config:{membank:b.memoryBank,wordPointer:firstWord+Math.floor(b.lengthBytes/2),wordCount:1}});const preRead=await runPhase(readAccesses,readAccesses.length,30000,[epc]);before=preRead.values.at(-1);if(typeof before!=='string'||!/^[0-9a-f]{4}$/i.test(before))throw Error(`Could not read the adjacent word needed to preserve its byte; nothing was written. Reader returned ${JSON.stringify(before)?.slice(0,80)||'no value'}`);}
+  if(b.lengthBytes%2){const readAccesses=[];if(b.accessPassword)readAccesses.push({type:'ACCESS',config:{password:b.accessPassword}});readAccesses.push({type:'READ',config:{membank:b.memoryBank,wordPointer:firstWord+Math.floor(b.lengthBytes/2),wordCount:1}});const preRead=await runPhase(readAccesses,readAccesses.length,30000,[epc]);const returned=preRead.values.at(-1),knownBank=typeof d[b.memoryBank]==='string'?d[b.memoryBank]:'';before=adjacentWordFromRead(b,returned,knownBank);if(!before)throw Error(`Could not read the adjacent word needed to preserve its byte; nothing was written. Reader returned ${typeof returned==='string'?`${returned.length/2} bytes`:typeof returned}`);}
   const plan=buildWordWritePlan(b,before),writeChunks=chunkWordAccess({dataHex:plan.writeHex,wordPointer:firstWord}),readChunks=writeChunks.map(({wordPointer,wordCount})=>({membank:b.memoryBank,wordPointer,wordCount}));
   const writeAccesses=[];if(b.accessPassword)writeAccesses.push({type:'ACCESS',config:{password:b.accessPassword}});for(const chunk of writeChunks)writeAccesses.push({type:'WRITE',config:{membank:b.memoryBank,wordPointer:chunk.wordPointer,data:chunk.dataHex}});for(const chunk of readChunks)writeAccesses.push({type:'READ',config:chunk});
   const completed=await runPhase(writeAccesses,writeAccesses.length,writeWaitTimeoutMs(b.lengthBytes),acceptedEpcs),values=completed.values,passwordOffset=b.accessPassword?1:0;
