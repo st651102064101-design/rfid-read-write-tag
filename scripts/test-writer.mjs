@@ -4,18 +4,23 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';
 import worker from '../worker/index.js';
 import {readerRecords,recordEpc,recordAccessResults} from '../reader/write-bridge-utils.mjs';
-import {buildWordWritePlan,writeResultVerified,writeWaitTimeoutMs} from '../reader/write-bridge-utils.mjs';
+import {buildWordWritePlan,chunkWordAccess,writeResultVerified,writeWaitTimeoutMs} from '../reader/write-bridge-utils.mjs';
 test('bridge finds FX9600 records and write results inside nested webhook payloads',()=>{
  const epc='0000000000424F582D303037',payload={envelope:{events:[{type:'CUSTOM',timestamp:'2026-10-01T07:00:00Z',data:{idHex:epc,accessResults:['AA','success','BB']}}]}};
  const records=readerRecords(payload);assert.equal(records.length,1);assert.equal(recordEpc(records[0]),epc);assert.deepEqual(recordAccessResults(records[0]),['AA','success','BB']);
 });
 test('odd byte writes preserve the adjacent byte without padding and verify both bytes',()=>{
- const request={lengthBytes:3,dataHex:'414243'},before='11223344',plan=buildWordWritePlan(request,before);
+ const request={lengthBytes:3,dataHex:'414243'},before='3344',plan=buildWordWritePlan(request,before);
  assert.equal(plan.wordCount,2);assert.equal(plan.writeHex,'41424344');
  assert.equal(writeResultVerified(request,plan,before,'success','41424344'),true);
  assert.equal(writeResultVerified(request,plan,before,'success','41424300'),false);
  assert.equal(writeResultVerified(request,plan,before,'success','41424444'),false);
- assert.throws(()=>buildWordWritePlan(request,'1122'),/complete tag word/);
+ assert.throws(()=>buildWordWritePlan(request,'112233'),/adjacent tag word/);
+});
+test('large writes are split into reader-sized word operations with matching pointers',()=>{
+ const chunks=chunkWordAccess({dataHex:'A'.repeat(66*2),wordPointer:12});
+ assert.deepEqual(chunks.map(({wordPointer,wordCount})=>({wordPointer,wordCount})),[{wordPointer:12,wordCount:32},{wordPointer:44,wordCount:1}]);
+ assert.equal(chunks.map(chunk=>chunk.dataHex).join(''),'A'.repeat(132));
 });
 test('even byte writes use exact payload and larger writes wait longer',()=>{
  const request={lengthBytes:4,dataHex:'41424344'},before='1122334455667788',plan=buildWordWritePlan(request,before);

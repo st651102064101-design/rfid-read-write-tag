@@ -21,17 +21,27 @@ export function recordAccessResults(record) {
  return data?.accessResults;
 }
 
+export const MAX_WORDS_PER_ACCESS=32;
+
+export function chunkWordAccess({dataHex,wordPointer,maxWords=MAX_WORDS_PER_ACCESS}){
+ const data=String(dataHex||'').toUpperCase();
+ if(!/^(?:[0-9A-F]{4})+$/.test(data)||!Number.isSafeInteger(wordPointer)||wordPointer<0||!Number.isSafeInteger(maxWords)||maxWords<1)throw Error('Invalid word access plan');
+ const chunks=[];
+ for(let offset=0;offset<data.length/4;offset+=maxWords){const words=Math.min(maxWords,data.length/4-offset);chunks.push({wordPointer:wordPointer+offset,wordCount:words,dataHex:data.slice(offset*4,(offset+words)*4)});}
+ return chunks;
+}
+
 export function buildWordWritePlan(request,beforeHex){
  const dataHex=String(request.dataHex||'').toUpperCase(),before=String(beforeHex||'').toUpperCase();
  if(!/^(?:[0-9A-F]{2})+$/.test(dataHex)||dataHex.length!==request.lengthBytes*2)throw Error('Invalid byte payload');
  const wordCount=Math.ceil(request.lengthBytes/2),readHexLength=wordCount*4;
  if(request.lengthBytes%2===0)return {wordCount,readHexLength,writeHex:dataHex};
- if(!/^(?:[0-9A-F]{4})+$/.test(before)||before.length<readHexLength)throw Error('Could not read the complete tag word before writing');
- return {wordCount,readHexLength,writeHex:request.lengthBytes%2?dataHex+before.slice(dataHex.length,dataHex.length+2):dataHex};
+ if(!/^[0-9A-F]{4}$/.test(before))throw Error('Could not read the adjacent tag word before writing');
+ return {wordCount,readHexLength,writeHex:dataHex+before.slice(2,4)};
 }
 export function writeResultVerified(request,plan,before,written,after){
  const prior=typeof before==='string'?before.toUpperCase():'',readback=typeof after==='string'?after.toUpperCase():'';
- const preserved=request.lengthBytes%2===0||readback.slice(request.lengthBytes*2,request.lengthBytes*2+2)===prior.slice(request.lengthBytes*2,request.lengthBytes*2+2);
+ const preserved=request.lengthBytes%2===0||readback.slice(request.lengthBytes*2,request.lengthBytes*2+2)===prior.slice(2,4);
  return /^success$/i.test(written||'')&&readback===plan.writeHex&&readback.slice(0,request.lengthBytes*2)===request.dataHex.toUpperCase()&&preserved;
 }
 export function writeWaitTimeoutMs(lengthBytes){return Math.min(120000,Math.max(20000,15000+lengthBytes*1600));}

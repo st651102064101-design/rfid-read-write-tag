@@ -2,7 +2,7 @@ import http from 'node:http';
 import https from 'node:https';
 import {createInterface} from 'node:readline';
 import {timingSafeEqual} from 'node:crypto';
-import {readerRecords,recordEpc,recordAccessResults,buildWordWritePlan,writeResultVerified,writeWaitTimeoutMs} from './write-bridge-utils.mjs';
+import {readerRecords,recordEpc,recordAccessResults,buildWordWritePlan,chunkWordAccess,writeResultVerified,writeWaitTimeoutMs} from './write-bridge-utils.mjs';
 // Read secrets from hidden stdin, never source or command-line arguments.
 if(process.stdin.isTTY)process.stdin.setRawMode(true);
 const input=createInterface({input:process.stdin,terminal:false});
@@ -12,7 +12,7 @@ const site=new URL(config.site).origin,reader=new URL(config.reader).origin;
 if(!config.token||!config.username||!config.password)throw Error('Missing configuration');
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));let busy=false;const completed=new Map();
 function request(path,method='GET',body,auth){return new Promise((resolve,reject)=>{
- const req=https.request(reader+path,{method,rejectUnauthorized:false,headers:{...(auth?{Authorization:auth}:{}),...(body?{'Content-Type':'application/json'}:{})}},res=>{let text='';res.on('data',chunk=>text+=chunk);res.on('end',()=>{if(res.statusCode<200||res.statusCode>=300)return reject(Error('Reader HTTP '+res.statusCode));try{resolve(text?JSON.parse(text):null);}catch{reject(Error('Invalid reader response'));}});});
+ const req=https.request(reader+path,{method,rejectUnauthorized:false,headers:{...(auth?{Authorization:auth}:{}),...(body?{'Content-Type':'application/json'}:{})}},res=>{let text='';res.on('data',chunk=>text+=chunk);res.on('end',()=>{if(res.statusCode<200||res.statusCode>=300)return reject(Error(`Reader ${method} ${path} HTTP ${res.statusCode}${text?': '+text.slice(0,180):''}`));try{resolve(text?JSON.parse(text):null);}catch{reject(Error('Invalid reader response'));}});});
  req.setTimeout(10000,()=>req.destroy(Error('Reader timeout')));req.on('error',reject);if(body)req.write(JSON.stringify(body));req.end();
 });}
 async function events(after=0){const response=await fetch(site+'/api/events'+(after?'/live?after='+after:''),{signal:AbortSignal.timeout(8000)});if(!response.ok)throw Error('Event API HTTP '+response.status);return (await response.json()).events;}
@@ -34,7 +34,7 @@ async function write(b){
  if(!tag)throw Error('Target EPC was not found in recent reader events');
  if(b.memoryBank==='EPC'&&b.offsetBytes+b.lengthBytes>epc.length/2+4)throw Error('Write exceeds current EPC length; PC length change is not supported');
  const identity=/^(?:[a-f0-9]{4})+$/i.test(tid||'')?{membank:'TID',pointer:0,length:tid.length*4,mask:tid}:{membank:'EPC',pointer:32,length:epc.length*4,mask:epc};
- const planBase={membank:b.memoryBank,wordPointer:b.offsetBytes/2,wordCount:Math.ceil(b.lengthBytes/2)};
+ const firstWord=b.offsetBytes/2,wordCount=Math.ceil(b.lengthBytes/2),planBase={membank:b.memoryBank,wordPointer:firstWord,wordCount};
  let baseline=Math.max(0,...fresh.map(event=>Number(event.id))),changed=false;const at=Date.now();let result;
  try{
   const makeMode=accesses=>({type:'CUSTOM',antennas:[Number(d.antenna)||1],transmitPower:[original.transmitPower?.[0]||15],query:{session:'S0',target:'A',sel:'NOT_SL'},selects:[{target:'S0',action:'INVA_INVB',...identity}],accesses,radioStopConditions:{antennaCycles:1}});
@@ -47,10 +47,11 @@ async function write(b){
   };
   const newEpc=b.memoryBank==='EPC'?epc.slice(0,(b.offsetBytes-4)*2)+b.dataHex.toUpperCase()+epc.slice((b.offsetBytes-4+b.lengthBytes)*2):epc;
   const acceptedEpcs=[epc,newEpc];let before;
-  if(b.lengthBytes%2){const readAccesses=[];if(b.accessPassword)readAccesses.push({type:'ACCESS',config:{password:b.accessPassword}});readAccesses.push({type:'READ',config:planBase});const preRead=await runPhase(readAccesses,readAccesses.length,30000,[epc]);before=preRead.values.at(-1);if(typeof before!=='string'||!/^(?:[0-9a-f]{4})+$/i.test(before)||before.length<planBase.wordCount*4)throw Error('Could not read the existing word needed to preserve the adjacent byte; nothing was written');}
-  const plan=buildWordWritePlan(b,before),writeAccesses=[];if(b.accessPassword)writeAccesses.push({type:'ACCESS',config:{password:b.accessPassword}});writeAccesses.push({type:'WRITE',config:{membank:b.memoryBank,wordPointer:b.offsetBytes/2,data:plan.writeHex}},{type:'READ',config:planBase});
-  const completed=await runPhase(writeAccesses,writeAccesses.length,writeWaitTimeoutMs(b.lengthBytes),acceptedEpcs),values=completed.values;
-  const written=values.at(-2),after=values.at(-1),verified=writeResultVerified(b,plan,before,written,after);
+  if(b.lengthBytes%2){const readAccesses=[];if(b.accessPassword)readAccesses.push({type:'ACCESS',config:{password:b.accessPassword}});readAccesses.push({type:'READ',config:{membank:b.memoryBank,wordPointer:firstWord+Math.floor(b.lengthBytes/2),wordCount:1}});const preRead=await runPhase(readAccesses,readAccesses.length,30000,[epc]);before=preRead.values.at(-1);if(typeof before!=='string'||!/^[0-9a-f]{4}$/i.test(before))throw Error('Could not read the adjacent word needed to preserve its byte; nothing was written');}
+  const plan=buildWordWritePlan(b,before),writeChunks=chunkWordAccess({dataHex:plan.writeHex,wordPointer:firstWord}),readChunks=writeChunks.map(({wordPointer,wordCount})=>({membank:b.memoryBank,wordPointer,wordCount}));
+  const writeAccesses=[];if(b.accessPassword)writeAccesses.push({type:'ACCESS',config:{password:b.accessPassword}});for(const chunk of writeChunks)writeAccesses.push({type:'WRITE',config:{membank:b.memoryBank,wordPointer:chunk.wordPointer,data:chunk.dataHex}});for(const chunk of readChunks)writeAccesses.push({type:'READ',config:chunk});
+  const completed=await runPhase(writeAccesses,writeAccesses.length,writeWaitTimeoutMs(b.lengthBytes),acceptedEpcs),values=completed.values,passwordOffset=b.accessPassword?1:0;
+  const writeResults=values.slice(passwordOffset,passwordOffset+writeChunks.length),readResults=values.slice(passwordOffset+writeChunks.length,passwordOffset+writeChunks.length*2),written=writeResults.every(value=>/^success$/i.test(value||''))?'success':writeResults.find(value=>!/^success$/i.test(value||''))||'Not Attempted',after=readResults.join(''),verified=writeResultVerified(b,plan,before,written,after);
   result={requestId:b.requestId,epc,status:verified?'success':'failed',memoryBank:b.memoryBank,offsetBytes:b.offsetBytes,beforeHex:before,afterHex:after,newEpc:verified?newEpc:undefined,verified,message:verified?'Written and read back from FX9600'+(b.lengthBytes%2?' · adjacent byte preserved':''):String(written==='Not Attempted'?written:written),readerEvent:completed.record.data.eventNum};
  }finally{
   if(changed){try{await request('/cloud/stop','PUT',null,auth);await request('/cloud/mode','PUT',original,auth);if(status.radioActivity==='active')await request('/cloud/start','PUT',null,auth);}catch{if(result)result.resumeWarning='Reader mode could not be restored; check reader console';else throw Error('Operation uncertain and reader mode restore failed');}}
