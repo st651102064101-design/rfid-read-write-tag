@@ -155,11 +155,12 @@ function memorySummary(payload,epc,count=1,receivedAt=''){
  for(const bank of ['EPC','TID','USER','RESERVED']){
   const raw=lookup(bank),hex=bank==='EPC'?(asHex(raw)||asHex(epc)):asHex(raw),tr=el('tr');tr.append(el('th',bank));
   const cell=el('td');
-  if(hex){const words=hex.length/4;cell.append(el('strong',(hex.length*4)+' bits · '+(hex.length/2)+' bytes · '+words+' '+(words===1?'word':'words')));const details=el('details',undefined,'bankraw');details.dataset.bank=bank;if(openBanks.has(bank))details.open=true;details.append(el('summary','ดูค่า HEX'));const value=el('code',hex);details.append(value);cell.append(details);}
+ if(hex){const words=hex.length/4;cell.append(el('strong',(hex.length*4)+' bits · '+(hex.length/2)+' bytes · '+words+' '+(words===1?'word':'words')));const details=el('details',undefined,'bankraw');details.dataset.bank=bank;if(openBanks.has(bank))details.open=true;details.append(el('summary','ดูค่า HEX'));const value=el('code',hex);details.append(value);cell.append(details);}
   else cell.textContent=raw===undefined?'ไม่พบข้อมูลจาก reader':'มีข้อมูล แต่รูปแบบไม่ใช่ HEX';
+  if(hex){const bytes=hex.match(/../g)||[];const ascii=bytes.map(pair=>{const byte=parseInt(pair,16);return byte>=0x20&&byte<=0x7e?String.fromCharCode(byte):'·';}).join('');const converted=el('div',undefined,'asciiValue');converted.append(el('small','ASCII (7-bit)'),el('code',ascii));cell.append(converted);}
   tr.append(cell);tbody.append(tr);
  }
- table.append(tbody);root.append(table,el('small','คำนวณจากข้อมูลที่ FX9600 ส่งมา ไม่ใช่ความจุสูงสุดของชิป · 1 word = 16 bits = 2 bytes'));
+ table.append(tbody);root.append(table,el('small','คำนวณจากข้อมูลที่ FX9600 ส่งมา ไม่ใช่ความจุสูงสุดของชิป · 1 word = 16 bits = 2 bytes · ASCII แทน byte ที่พิมพ์ไม่ได้ด้วย ·'));
  const meta=el('dl',undefined,'tagMetadata');
  const values=[['PC',lookup('PC')],['CRC',lookup('CRC')],['เสาอากาศ',lookup('antenna')],['RSSI สูงสุด',lookup('peakRssi')],['ช่องความถี่',lookup('channel')],['รูปแบบ',lookup('format')],['เครื่องอ่าน',lookup('hostName')],['Event',lookup('eventNum')]];
  for(const [label,value] of values)if(value!==undefined){let shown=String(value);if(label==='PC'||label==='CRC'){const hex=asHex(value);if(hex)shown='0x'+hex+' · '+(hex.length*4)+' bits · '+(hex.length/4)+' words';}else if(label==='RSSI สูงสุด')shown+=' dBm';else if(label==='ช่องความถี่')shown+=' MHz';const item=el('div',undefined,'tagMetric');item.append(el('dt',label),el('dd',shown));meta.append(item);}

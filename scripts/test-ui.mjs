@@ -65,9 +65,9 @@ test('memory sizes reflect received bytes and bank selector maps EPC offset',asy
 
 test('right-side tag details read nested Zebra FX9600 data banks and metadata',async()=>{
  const epc='E2806F12000000022DF13118',e=event(1,epc);
- e.payload=[{type:'INVENTORY',eventNum:12,format:'epc',hostName:'FX9600',idHex:epc.toLowerCase(),peakRssi:-24,antenna:1,channel:923.25,data:{PC:'3000',CRC:'2827',TID:'E2806F12200094022DF13118',USER:'AB'.repeat(256)}}];
+ e.payload=[{type:'INVENTORY',eventNum:12,format:'epc',hostName:'FX9600',idHex:epc.toLowerCase(),peakRssi:-24,antenna:1,channel:923.25,data:{PC:'3000',CRC:'2827',TID:'E2806F12200094022DF13118',USER:'48454C4C4F2052464944'}}];
  const a=await setup([e]);try{const detail=a.doc.getElementById('tagDetails').textContent;
-  assert.match(detail,new RegExp(epc));assert.match(detail,/2048 bits · 256 bytes · 128 words/);assert.match(detail,/96 bits · 12 bytes · 6 words/);assert.match(detail,/0x3000 · 16 bits · 1 word/);assert.match(detail,/-24 dBm/);assert.match(detail,/923\.25 MHz/);
-  assert.equal(a.doc.querySelectorAll('#tagDetails .bankraw').length,3);
+  assert.match(detail,new RegExp(epc));assert.match(detail,/80 bits · 10 bytes · 5 words/);assert.match(detail,/96 bits · 12 bytes · 6 words/);assert.match(detail,/0x3000 · 16 bits · 1 word/);assert.match(detail,/-24 dBm/);assert.match(detail,/923\.25 MHz/);
+  assert.equal(a.doc.querySelectorAll('#tagDetails .bankraw').length,3);assert.ok([...a.doc.querySelectorAll('#tagDetails .asciiValue code')].some(node=>node.textContent==='HELLO RFID'));assert.match(detail,/ASCII \(7-bit\)/);assert.match(detail,/แทน byte ที่พิมพ์ไม่ได้ด้วย ·/);
  }finally{a.close();}
 });
