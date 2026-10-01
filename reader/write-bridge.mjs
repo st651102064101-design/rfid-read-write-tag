@@ -2,6 +2,7 @@ import http from 'node:http';
 import https from 'node:https';
 import {createInterface} from 'node:readline';
 import {timingSafeEqual} from 'node:crypto';
+import {readerRecords,recordEpc,recordAccessResults} from './write-bridge-utils.mjs';
 // Read secrets from hidden stdin, never source or command-line arguments.
 if(process.stdin.isTTY)process.stdin.setRawMode(true);
 const input=createInterface({input:process.stdin,terminal:false});
@@ -28,7 +29,7 @@ async function write(b){
  if(login.code!==0||!login.message)throw Error('Reader login failed');const auth='Bearer '+login.message;
  const original=await request('/cloud/mode','GET',null,auth),status=await request('/cloud/status','GET',null,auth);
  const epc=b.epc.toUpperCase(),fresh=await events();
- const records=fresh.flatMap(event=>Array.isArray(event.payload)?event.payload:[event.payload]);const tag=records.find(record=>(record.data?.idHex||record.idHex||'').toUpperCase()===epc);
+ const records=fresh.flatMap(event=>readerRecords(event.payload));const tag=records.find(record=>recordEpc(record)===epc);
  const d=tag?.data||tag||{},tid=d.TID||(tag?.type==='CUSTOM'&&d.MAC==='C4:7D:CC:74:AF:20'&&d.accessResults?.length===4?d.accessResults[1]:null);
  if(!tag)throw Error('Target EPC was not found in recent reader events');
  if(b.memoryBank==='EPC'&&b.offsetBytes+b.lengthBytes>epc.length/2+4)throw Error('Write exceeds current EPC length; PC length change is not supported');
@@ -41,9 +42,9 @@ async function write(b){
  try{
   await request('/cloud/stop','PUT',null,auth);changed=true;await request('/cloud/mode','PUT',mode,auth);await request('/cloud/start','PUT',null,auth);
   const newEpc=b.memoryBank==='EPC'?epc.slice(0,(b.offsetBytes-4)*2)+b.dataHex.toUpperCase()+epc.slice((b.offsetBytes-4+b.lengthBytes)*2):epc;
-  while(Date.now()-at<16000){await delay(350);const incoming=await events(baseline);for(const event of incoming){baseline=Math.max(baseline,Number(event.id));for(const record of Array.isArray(event.payload)?event.payload:[event.payload]){
-   const values=record.data?.accessResults,id=record.data?.idHex?.toUpperCase();
-   if(record.type!=='CUSTOM'||!values||values.length!==accesses.length||![epc,newEpc].includes(id)||Date.parse(record.timestamp)<at-1000)continue;
+  while(Date.now()-at<16000){await delay(350);const incoming=await events(baseline);for(const event of incoming){baseline=Math.max(baseline,Number(event.id));for(const record of readerRecords(event.payload)){
+   const values=recordAccessResults(record),id=recordEpc(record);
+   if(record.type!=='CUSTOM'||!Array.isArray(values)||values.length<3||![epc,newEpc].includes(id)||Date.parse(record.timestamp)<at-1000)continue;
    const [before,written,after]=values.slice(-3),verified=/^success$/i.test(written)&&typeof after==='string'&&after.toUpperCase()===b.dataHex.toUpperCase();
    result={requestId:b.requestId,epc,status:verified?'success':'failed',memoryBank:b.memoryBank,offsetBytes:b.offsetBytes,beforeHex:before,afterHex:after,newEpc:verified?newEpc:undefined,verified,message:verified?'Written and read back from FX9600':String(written==='Not Attempted'?before:written),readerEvent:record.data.eventNum};break;
   }if(result)break;}if(result)break;}
@@ -61,7 +62,7 @@ const server=http.createServer(async(req,res)=>{
  if(req.url!=='/write'||req.method!=='POST')return send(404,{error:'Not found'});
  let b;try{let text='';for await(const chunk of req){text+=chunk;if(text.length>8192)throw Error('Too large');}b=JSON.parse(text);validate(b);}catch(e){return send(400,{error:e.message});}
  if(completed.has(b.requestId))return send(200,completed.get(b.requestId));if(busy)return send(409,{error:'Reader busy'});busy=true;
- try{const result=await write(b);completed.set(b.requestId,result);send(200,result);}catch{const result={requestId:b.requestId,epc:b.epc,status:'unknown',verified:false,message:'Bridge could not confirm the operation. Check tag and reader before retrying.'};completed.set(b.requestId,result);send(200,result);}finally{busy=false;}
+ try{const result=await write(b);completed.set(b.requestId,result);send(200,result);}catch(error){const result={requestId:b.requestId,epc:b.epc,status:'unknown',verified:false,message:String(error?.message||'Bridge could not confirm the operation. Check tag and reader before retrying.').slice(0,240)};completed.set(b.requestId,result);send(200,result);}finally{busy=false;}
 });server.listen(5051,'127.0.0.1',()=>console.log('FX9600 writer bridge listening on localhost:5051'));
 // Outbound polling: no public tunnel or inbound network port is required.
 let pendingResult=null;
@@ -70,7 +71,7 @@ async function poll(){
  try{
   const response=await fetch(site+'/api/bridge/poll',{method:'POST',headers:{Authorization:'Bearer '+config.token,'Content-Type':'application/json'},body:JSON.stringify({result:pendingResult}),signal:AbortSignal.timeout(8000)});
   if(!response.ok)return;const data=await response.json();pendingResult=null;
-  if(data.command){const b=data.command;busy=true;try{pendingResult=completed.get(b.requestId)||await write(b);completed.set(b.requestId,pendingResult);}catch{pendingResult={requestId:b.requestId,epc:b.epc,status:'unknown',verified:false,message:'Hardware result not confirmed. Check tag before retrying.'};completed.set(b.requestId,pendingResult);}finally{busy=false;}}
+  if(data.command){const b=data.command;busy=true;try{pendingResult=completed.get(b.requestId)||await write(b);completed.set(b.requestId,pendingResult);}catch(error){pendingResult={requestId:b.requestId,epc:b.epc,status:'unknown',verified:false,message:String(error?.message||'Hardware result not confirmed. Check tag before retrying.').slice(0,240)};completed.set(b.requestId,pendingResult);}finally{busy=false;}}
  }catch{/* Keep pending result and retry delivering it; never repeat the write. */}
 }
 setInterval(poll,1000);poll();

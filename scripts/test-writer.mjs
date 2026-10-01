@@ -3,6 +3,11 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';
 import worker from '../worker/index.js';
+import {readerRecords,recordEpc,recordAccessResults} from '../reader/write-bridge-utils.mjs';
+test('bridge finds FX9600 records and write results inside nested webhook payloads',()=>{
+ const epc='0000000000424F582D303037',payload={envelope:{events:[{type:'CUSTOM',timestamp:'2026-10-01T07:00:00Z',data:{idHex:epc,accessResults:['AA','success','BB']}}]}};
+ const records=readerRecords(payload);assert.equal(records.length,1);assert.equal(recordEpc(records[0]),epc);assert.deepEqual(recordAccessResults(records[0]),['AA','success','BB']);
+});
 test('outbound writer queue claims once and returns verified result with request-id deduplication',async()=>{
  const db=new DatabaseSync(':memory:');for(const file of readdirSync('drizzle').filter(file=>file.endsWith('.sql')).sort())db.exec(readFileSync('drizzle/'+file,'utf8'));
  const env={WRITE_BRIDGE_TOKEN:'bridge-test',WRITE_OPERATOR_KEY:'operator-test',DB:{prepare(sql){const stmt=db.prepare(sql);let args=[];return {bind(...values){args=values;return this;},async run(){return stmt.run(...args);},async all(){return {results:stmt.all(...args)};}};}}};

@@ -71,6 +71,12 @@ test('verified write shows a success toast fixed at the bottom-right',async()=>{
   assert.match(readFileSync('public/style.css','utf8'),/\.toast\{position:fixed;right:24px;bottom:24px/);
  }finally{a.close();}
 });
+test('unconfirmed writes show the bridge reason instead of a generic warning',async()=>{
+ const reason='Timed out waiting for hardware result. Do not repeat without checking the tag.',a=await setup([event(1,'AABB')],{writeAvailable:true,writeResult:body=>({requestId:body.requestId,epc:body.epc,status:'unknown',verified:false,message:reason})});try{
+ const bank=a.doc.getElementById('memoryBank');bank.value='USER';bank.dispatchEvent(new a.dom.window.Event('change'));const data=a.doc.getElementById('data');data.value='EVEN';data.dispatchEvent(new a.dom.window.Event('input'));
+ await a.doc.getElementById('writer').onsubmit(new a.dom.window.Event('submit',{cancelable:true}));assert.match(a.doc.getElementById('toast').textContent,new RegExp(reason.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));assert.match(a.doc.getElementById('result').textContent,/USER · 4 bytes/);assert.match(a.doc.getElementById('result').textContent,/ตรวจอ่านแท็กก่อนส่งซ้ำ/);
+ }finally{a.close();}
+});
 test('ASCII EPC replacement keeps current EPC length and previews all leading zero bytes',async()=>{
  const original='0000000000424F582D303130',a=await setup([event(1,original)],{writeAvailable:true});try{
  const select=a.doc.getElementById('epc');select.value=original;select.dispatchEvent(new a.dom.window.Event('change'));
