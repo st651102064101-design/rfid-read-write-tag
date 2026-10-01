@@ -35,6 +35,7 @@ test('live updates count once per event, then expire after five seconds',async()
  const a=await setup([event(1)]);try{a.state.live=[event(2)];await a.tick(500);await a.tick(500);
  assert.equal(a.doc.querySelectorAll('.eventcard').length,1);assert.match(a.doc.getElementById('eventList').textContent,/อ่านพบ 2 ครั้ง/);
  a.state.live=[];a.advance(6000);await a.tick(500);assert.equal(a.doc.querySelectorAll('.eventcard').length,0);assert.match(a.doc.getElementById('eventList').textContent,/ไม่พบแท็ก/);
+ assert.match(a.doc.getElementById('tagDetails').textContent,/ยังไม่พบแท็ก/);assert.doesNotMatch(a.doc.getElementById('tagDetails').textContent,/AABB/);
  }finally{a.close();}
 });
 test('large expired backlog does not throw or leave loading status stuck',async()=>{
@@ -52,4 +53,13 @@ test('heartbeat online, offline, and unavailable states are independent of tag r
  }finally{a.close();}
 });
 
-test('memory sizes reflect received bytes and bank selector maps EPC offset',async()=>{const e=event(1);e.payload.tag_reads[0].USER='AB'.repeat(256);e.payload.tag_reads[0].TID='CD'.repeat(12);const a=await setup([e]);try{const text=a.doc.querySelector('.capacity').textContent;assert.match(text,/2048 bits · 256 bytes · 128 words/);assert.match(text,/96 bits · 12 bytes · 6 words/);assert.match(text,/ยังไม่ได้รับข้อมูล/);const select=a.doc.getElementById('memoryBank');select.value='EPC';select.dispatchEvent(new a.dom.window.Event('change'));assert.equal(a.doc.getElementById('offset').value,'4');}finally{a.close();}});
+test('memory sizes reflect received bytes and bank selector maps EPC offset',async()=>{const e=event(1);e.payload.tag_reads[0].USER='AB'.repeat(256);e.payload.tag_reads[0].TID='CD'.repeat(12);const a=await setup([e]);try{const text=a.doc.querySelector('.capacity').textContent;assert.match(text,/2048 bits · 256 bytes · 128 words/);assert.match(text,/96 bits · 12 bytes · 6 words/);assert.match(text,/ไม่พบข้อมูลจาก reader/);const select=a.doc.getElementById('memoryBank');select.value='EPC';select.dispatchEvent(new a.dom.window.Event('change'));assert.equal(a.doc.getElementById('offset').value,'4');}finally{a.close();}});
+
+test('right-side tag details read nested Zebra FX9600 data banks and metadata',async()=>{
+ const epc='E2806F12000000022DF13118',e=event(1,epc);
+ e.payload=[{type:'INVENTORY',eventNum:12,format:'epc',hostName:'FX9600',idHex:epc.toLowerCase(),peakRssi:-24,antenna:1,channel:923.25,data:{PC:'3000',CRC:'2827',TID:'E2806F12200094022DF13118',USER:'AB'.repeat(256)}}];
+ const a=await setup([e]);try{const detail=a.doc.getElementById('tagDetails').textContent;
+  assert.match(detail,new RegExp(epc));assert.match(detail,/2048 bits · 256 bytes · 128 words/);assert.match(detail,/96 bits · 12 bytes · 6 words/);assert.match(detail,/0x3000 · 16 bits · 1 word/);assert.match(detail,/-24 dBm/);assert.match(detail,/923\.25 MHz/);
+  assert.equal(a.doc.querySelectorAll('#tagDetails .bankraw').length,3);
+ }finally{a.close();}
+});
