@@ -4,7 +4,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';
 import worker from '../worker/index.js';
 import {readerRecords,recordEpc,recordAccessResults} from '../reader/write-bridge-utils.mjs';
-import {accessSequenceMatches,adjacentWordFromRead,buildWordWritePlan,chunkWordAccess,writeResultVerified,writeWaitTimeoutMs} from '../reader/write-bridge-utils.mjs';
+import {accessSequenceMatches,adjacentWordFromRead,buildWordWritePlan,chunkWordAccess,writeChunkPhases,writeResultVerified,writeWaitTimeoutMs} from '../reader/write-bridge-utils.mjs';
 test('bridge finds FX9600 records and write results inside nested webhook payloads',()=>{
  const epc='0000000000424F582D303037',payload={envelope:{events:[{type:'CUSTOM',timestamp:'2026-10-01T07:00:00Z',data:{idHex:epc,accessResults:['AA','success','BB']}}]}};
  const records=readerRecords(payload);assert.equal(records.length,1);assert.equal(recordEpc(records[0]),epc);assert.deepEqual(recordAccessResults(records[0]),['AA','success','BB']);
@@ -24,16 +24,24 @@ test('large writes are split into reader-sized word operations with matching poi
  assert.deepEqual(chunks.map(({wordPointer,wordCount})=>({wordPointer,wordCount})),[{wordPointer:12,wordCount:32},{wordPointer:44,wordCount:1}]);
  assert.equal(chunks.map(chunk=>chunk.dataHex).join(''),'A'.repeat(132));
 });
+test('large writes use one write or read per reader access sequence',()=>{
+ const chunks=chunkWordAccess({dataHex:'22'.repeat(256),wordPointer:0}),phases=writeChunkPhases({chunks,memoryBank:'USER'});
+ assert.equal(chunks.length,4);assert.equal(phases.length,8);assert.ok(phases.every(phase=>phase.accesses.length===1));
+ assert.deepEqual(phases.map(phase=>phase.phase),['write','read','write','read','write','read','write','read']);
+ assert.deepEqual(phases.filter(phase=>phase.phase==='write').map(phase=>phase.accesses[0].config.wordPointer),[0,32,64,96]);
+ assert.ok(phases.every(phase=>phase.chunk.wordCount<=32));
+ const secured=writeChunkPhases({chunks:chunks.slice(0,1),memoryBank:'USER',accessPassword:'12345678'});assert.ok(secured.every(phase=>phase.accesses.length===2&&phase.accesses[0].type==='ACCESS'));
+});
 test('reader mode verification accepts normalized HEX while requiring the requested access sequence',()=>{
  const expected=[{type:'WRITE',config:{membank:'USER',wordPointer:0,data:'5A62'}},{type:'READ',config:{membank:'USER',wordPointer:0,wordCount:1}}];
  assert.equal(accessSequenceMatches([{type:'WRITE',config:{membank:'USER',wordPointer:0,data:'5a62'}},{type:'READ',config:{membank:'USER',wordPointer:0,wordCount:1}}],expected),true);
  assert.equal(accessSequenceMatches([{type:'READ',config:{membank:'USER',wordPointer:0,wordCount:1}}],expected),false);
 });
-test('even byte writes use exact payload and larger writes wait longer',()=>{
+test('even byte writes use exact payload and each chunk has a bounded result wait',()=>{
  const request={lengthBytes:4,dataHex:'41424344'},before='1122334455667788',plan=buildWordWritePlan(request,before);
  assert.equal(plan.wordCount,2);assert.equal(plan.writeHex,'41424344');
  assert.equal(writeResultVerified(request,plan,before,'success','41424344'),true);
- assert.ok(writeWaitTimeoutMs(66)>writeWaitTimeoutMs(64));assert.ok(writeWaitTimeoutMs(256)<=120000);
+ assert.ok(writeWaitTimeoutMs(2)>=20000);assert.ok(writeWaitTimeoutMs(64)<=30000);assert.equal(writeWaitTimeoutMs(256),30000);
 });
 test('outbound writer queue claims once and returns verified result with request-id deduplication',async()=>{
  const db=new DatabaseSync(':memory:');for(const file of readdirSync('drizzle').filter(file=>file.endsWith('.sql')).sort())db.exec(readFileSync('drizzle/'+file,'utf8'));

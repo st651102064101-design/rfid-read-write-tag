@@ -2,7 +2,7 @@ import http from 'node:http';
 import https from 'node:https';
 import {createInterface} from 'node:readline';
 import {timingSafeEqual} from 'node:crypto';
-import {readerRecords,recordEpc,recordAccessResults,accessSequenceMatches,adjacentWordFromRead,buildWordWritePlan,chunkWordAccess,writeResultVerified,writeWaitTimeoutMs} from './write-bridge-utils.mjs';
+import {readerRecords,recordEpc,recordAccessResults,accessSequenceMatches,adjacentWordFromRead,buildWordWritePlan,chunkWordAccess,writeChunkPhases,writeResultVerified,writeWaitTimeoutMs} from './write-bridge-utils.mjs';
 // Read secrets from hidden stdin, never source or command-line arguments.
 if(process.stdin.isTTY)process.stdin.setRawMode(true);
 const input=createInterface({input:process.stdin,terminal:false});
@@ -51,11 +51,18 @@ async function write(b){
   const newEpc=b.memoryBank==='EPC'?epc.slice(0,(b.offsetBytes-4)*2)+b.dataHex.toUpperCase()+epc.slice((b.offsetBytes-4+b.lengthBytes)*2):epc;
   const acceptedEpcs=[epc,newEpc];let before;
   if(b.lengthBytes%2){const readAccesses=[];if(b.accessPassword)readAccesses.push({type:'ACCESS',config:{password:b.accessPassword}});readAccesses.push({type:'READ',config:{membank:b.memoryBank,wordPointer:firstWord+Math.floor(b.lengthBytes/2),wordCount:1}});const preRead=await runPhase(readAccesses,readAccesses.length,30000,[epc]);const returned=preRead.values.at(-1),knownBankRecord=records.find(record=>recordEpc(record)===epc&&/^(?:[0-9a-f]{4})+$/i.test(record?.data?.[b.memoryBank]||'')),accessRecord=records.find(record=>recordEpc(record)===epc&&Array.isArray(recordAccessResults(record))&&recordAccessResults(record).length>=4&&/^(?:[0-9a-f]{4})+$/i.test(recordAccessResults(record).at(-1)||'')),knownBank=knownBankRecord?.data?.[b.memoryBank]||d[b.memoryBank]||(accessRecord?recordAccessResults(accessRecord).at(-1):'');before=adjacentWordFromRead(b,returned,knownBank);if(!before)throw Error(`Could not read the adjacent word needed to preserve its byte; nothing was written. Reader returned ${typeof returned==='string'?`${returned.length/2} bytes`:typeof returned}; matching bank ${knownBank.length/2} bytes`);}
-  const plan=buildWordWritePlan(b,before),writeChunks=chunkWordAccess({dataHex:plan.writeHex,wordPointer:firstWord}),readChunks=writeChunks.map(({wordPointer,wordCount})=>({membank:b.memoryBank,wordPointer,wordCount}));
-  const writeAccesses=[];if(b.accessPassword)writeAccesses.push({type:'ACCESS',config:{password:b.accessPassword}});for(const chunk of writeChunks)writeAccesses.push({type:'WRITE',config:{membank:b.memoryBank,wordPointer:chunk.wordPointer,data:chunk.dataHex}});for(const chunk of readChunks)writeAccesses.push({type:'READ',config:chunk});
-  const completed=await runPhase(writeAccesses,writeAccesses.length,writeWaitTimeoutMs(b.lengthBytes),acceptedEpcs),values=completed.values,passwordOffset=b.accessPassword?1:0;
-  const writeResults=values.slice(passwordOffset,passwordOffset+writeChunks.length),readResults=values.slice(passwordOffset+writeChunks.length,passwordOffset+writeChunks.length*2),written=writeResults.every(value=>/^success$/i.test(value||''))?'success':writeResults.find(value=>!/^success$/i.test(value||''))||'Not Attempted',after=readResults.join(''),verified=writeResultVerified(b,plan,before,written,after);
-  result={requestId:b.requestId,epc,status:verified?'success':'failed',memoryBank:b.memoryBank,offsetBytes:b.offsetBytes,beforeHex:before,afterHex:after,newEpc:verified?newEpc:undefined,verified,message:verified?'Written and read back from FX9600'+(b.lengthBytes%2?' · adjacent byte preserved':''):String(written==='Not Attempted'?written:written),readerEvent:completed.record.data.eventNum};
+  const plan=buildWordWritePlan(b,before),writeChunks=chunkWordAccess({dataHex:plan.writeHex,wordPointer:firstWord});
+  // Keep each RFID access sequence small: some FX9600 firmware rejects large
+  // sequences with HTTP 422. Write and verify one <=32-word chunk at a time.
+  let after='',written='success',lastEvent;
+  for(const phase of writeChunkPhases({chunks:writeChunks,memoryBank:b.memoryBank,accessPassword:b.accessPassword})){
+   const completed=await runPhase(phase.accesses,phase.accesses.length,writeWaitTimeoutMs(phase.chunk.dataHex.length/2),acceptedEpcs);lastEvent=completed.record.data.eventNum;
+   const value=completed.values.at(-1)||'';
+   if(phase.phase==='write'){if(!/^success$/i.test(value)){written=value||'Not Attempted';break;}}
+   else after+=value;
+  }
+  const verified=writeResultVerified(b,plan,before,written,after);
+  result={requestId:b.requestId,epc,status:verified?'success':'failed',memoryBank:b.memoryBank,offsetBytes:b.offsetBytes,beforeHex:before,afterHex:after,newEpc:verified?newEpc:undefined,verified,message:verified?'Written and read back from FX9600'+(b.lengthBytes%2?' · adjacent byte preserved':''):String(written==='Not Attempted'?written:written),readerEvent:lastEvent};
  }finally{
   if(changed){try{await request('/cloud/stop','PUT',null,auth);await request('/cloud/mode','PUT',original,auth);if(status.radioActivity==='active')await request('/cloud/start','PUT',null,auth);}catch{if(result)result.resumeWarning='Reader mode could not be restored; check reader console';else throw Error('Operation uncertain and reader mode restore failed');}}
  }

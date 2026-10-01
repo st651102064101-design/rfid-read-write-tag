@@ -31,6 +31,17 @@ export function chunkWordAccess({dataHex,wordPointer,maxWords=MAX_WORDS_PER_ACCE
  return chunks;
 }
 
+export function writeChunkPhases({chunks,memoryBank,accessPassword=''}){
+ if(!Array.isArray(chunks)||!['EPC','TID','USER','RESERVED'].includes(memoryBank))throw Error('Invalid chunk phase plan');
+ return chunks.flatMap(chunk=>{
+  const auth=accessPassword?[{type:'ACCESS',config:{password:accessPassword}}]:[];
+  return [
+   {phase:'write',chunk,accesses:[...auth,{type:'WRITE',config:{membank:memoryBank,wordPointer:chunk.wordPointer,data:chunk.dataHex}}]},
+   {phase:'read',chunk,accesses:[...auth,{type:'READ',config:{membank:memoryBank,wordPointer:chunk.wordPointer,wordCount:chunk.wordCount}}]},
+  ];
+ });
+}
+
 export function accessSequenceMatches(actual,expected){
  if(!Array.isArray(actual)||!Array.isArray(expected)||actual.length!==expected.length)return false;
  return expected.every((operation,index)=>actual[index]?.type===operation.type&&Object.entries(operation.config||{}).every(([key,value])=>{
@@ -60,4 +71,4 @@ export function writeResultVerified(request,plan,before,written,after){
  const preserved=request.lengthBytes%2===0||readback.slice(request.lengthBytes*2,request.lengthBytes*2+2)===prior.slice(2,4);
  return /^success$/i.test(written||'')&&readback===plan.writeHex&&readback.slice(0,request.lengthBytes*2)===request.dataHex.toUpperCase()&&preserved;
 }
-export function writeWaitTimeoutMs(lengthBytes){return Math.min(120000,Math.max(20000,15000+lengthBytes*1600));}
+export function writeWaitTimeoutMs(lengthBytes){return Math.min(30000,Math.max(20000,15000+lengthBytes*234));}
