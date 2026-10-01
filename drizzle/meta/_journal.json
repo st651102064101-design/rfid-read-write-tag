@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1790824661624,
+      "tag": "0000_zippy_dreaming_celestial",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790826918809,
+      "tag": "0001_reader_heartbeats",
+      "breakpoints": true
+    }
+  ]
+}
