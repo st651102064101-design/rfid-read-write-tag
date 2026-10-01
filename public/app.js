@@ -56,17 +56,17 @@ function renderEvents(events){
   const selected=display.find(item=>item.epc===selectedEpc)||tagChoices.get(selectedEpc)||display[0];selectedEpc=selected.epc;updateTagOptions();updateTagDetails(selected);
   for(const item of display){
   const event=item.event;
-  const card=el('details',undefined,'eventcard'),summary=el('summary');
+  const itemRow=el('div',undefined,'eventitem'),card=el('details',undefined,'eventcard'),summary=el('summary');
   card.dataset.epc=item.epc||'';card.dataset.eventId=String(event.id);
   if(openCards.has(card.dataset.epc||card.dataset.eventId))card.open=true;
   summary.append(el('strong',item.epc?item.epc+' · อ่านพบ '+item.count+' ครั้ง':'Event / สถานะเครื่อง'),el('span',new Date(event.receivedAt).toLocaleString('th-TH')+' · #'+event.id));
   card.append(summary);summary.addEventListener('click',()=>{selectedEpc=item.epc;updateTagOptions();updateTagDetails(item);});
-  const buttons=el('div',undefined,'epcButtons');
-  if(item.epc){const button=el('button','ใช้ EPC '+item.epc);button.type='button';button.onclick=()=>{selectedEpc=item.epc;updateTagOptions();updateTagDetails(tagChoices.get(item.epc)||item);$('epc').value=item.epc;$('epc').scrollIntoView({behavior:'smooth',block:'center'});$('epc').focus();};buttons.append(button);}
-  card.append(buttons);if(item.epc)card.append(memorySummary(event.payload,item.epc,item.count,event.receivedAt));
+  if(item.epc)card.append(memorySummary(event.payload,item.epc,item.count,event.receivedAt));
   const table=el('table'),tbody=el('tbody');
   for(const [key,value] of fields(event.payload)){const tr=el('tr');tr.append(el('th',key),el('td',value));tbody.append(tr);}table.append(tbody);
-  const raw=el('details',undefined,'technical'),rawLabel=el('summary','ข้อมูลดิบสำหรับตรวจสอบ · ทุกฟิลด์และ JSON');raw.dataset.rawKey=item.epc?'raw-'+item.epc:'raw-event-'+event.id;raw.append(rawLabel,table,el('pre',JSON.stringify(event.payload,null,2)));card.append(raw);for(const detail of card.querySelectorAll('details[data-raw-key]'))detail.open=openRaw.has(detail.dataset.rawKey);feedList.append(card);
+  const raw=el('details',undefined,'technical'),rawLabel=el('summary','ข้อมูลดิบสำหรับตรวจสอบ · ทุกฟิลด์และ JSON');raw.dataset.rawKey=item.epc?'raw-'+item.epc:'raw-event-'+event.id;raw.append(rawLabel,table,el('pre',JSON.stringify(event.payload,null,2)));card.append(raw);for(const detail of card.querySelectorAll('details[data-raw-key]'))detail.open=openRaw.has(detail.dataset.rawKey);itemRow.append(card);
+  if(item.epc){const button=el('button','เลือกแท็กนี้เพื่อเขียน');button.type='button';button.className='chooseTag';button.setAttribute('aria-label','เลือก EPC '+item.epc+' ในฟอร์มเขียน');button.onclick=()=>{selectedEpc=item.epc;updateTagOptions(true);$('epc').value=item.epc;updateTagDetails(tagChoices.get(item.epc)||item);$('writer').scrollIntoView({behavior:'smooth',block:'start'});$('epc').focus({preventScroll:true});};itemRow.append(button);}
+  feedList.append(itemRow);
  }
 }
 function readSummary(events){const epcs=new Set();let reads=0;for(const event of events){const values=findEpcs(event.payload);reads+=values.length;for(const epc of values)epcs.add(epc);}return epcs.size+' แท็กไม่ซ้ำ · '+reads+' ครั้งที่อ่าน';}

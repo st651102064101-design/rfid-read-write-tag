@@ -56,6 +56,9 @@ test('user can select a previously read EPC from the dropdown',async()=>{
  assert.equal(a.dom.window.document.getElementById('tagDetails').textContent.includes('EPC · AABB'),true);
  }finally{a.close();}
 });
+test('tag card has a direct select-for-writing action and keeps dropdown in sync',async()=>{
+ const a=await setup([event(2,'CCDD'),event(1,'AABB')]);try{const button=[...a.doc.querySelectorAll('.chooseTag')].find(node=>node.getAttribute('aria-label')==='เลือก EPC CCDD ในฟอร์มเขียน');assert.ok(button);button.click();assert.equal(a.doc.getElementById('epc').value,'CCDD');assert.match(a.doc.getElementById('tagDetails').textContent,/EPC · CCDD/);assert.equal(a.doc.querySelectorAll('#epc option').length,3);}finally{a.close();}
+});
 test('empty and stale initial responses render an explicit empty state',async()=>{
  for(const events of [[],[event(1,'AABB',6000)]]){const a=await setup(events);try{assert.match(a.doc.getElementById('eventList').textContent,/ไม่พบแท็ก/);assert.equal(a.doc.querySelectorAll('.eventcard').length,0);}finally{a.close();}}
 });
