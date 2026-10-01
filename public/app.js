@@ -202,6 +202,7 @@ $('memoryBank').addEventListener('change',()=>{
  const bank=$('memoryBank').value;$('offset').value=bank==='EPC'?'4':'0';
  $('bankNote').textContent=bank==='TID'?'TID มักล็อกถาวรจากโรงงาน เขียนได้เฉพาะชิปที่รองรับ':bank==='RESERVED'?'Reserved เก็บ Kill/Access password ต้องตรวจค่าก่อนเขียน':bank==='EPC'?'เริ่มที่ byte 4 เพื่อไม่ทับ CRC/PC · ใส่ข้อมูลครบตามช่วงที่ต้องการเขียน':'เขียน USER Memory';update();
 });
+$('memoryBank').dispatchEvent(new Event('change'));
 
 async function writerStatus(){try{const response=await fetch('/api/write/config');const data=await response.json();endpoint=data.available?'/api/write':'';$('below').textContent=data.available?'เขียนจริง · อ่านกลับยืนยันทุกครั้ง · notebook bridge เชื่อมต่อแล้ว':'กำลังรอ notebook bridge · เปิด notebook และโปรแกรม bridge';$('write').innerHTML=data.available?'<span>✎</span> เขียนข้อมูลแท็ก':'<span>✎</span> รอการเชื่อมต่อ';update();}catch{endpoint='';$('below').textContent='ตรวจสอบการเชื่อมต่อ notebook bridge ไม่ได้';$('write').innerHTML='<span>✎</span> รอการเชื่อมต่อ';update();}}writerStatus();setInterval(writerStatus,10000);
 

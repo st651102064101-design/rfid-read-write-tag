@@ -100,7 +100,7 @@ test('heartbeat online, offline, and unavailable states are independent of tag r
  }finally{a.close();}
 });
 
-test('memory sizes reflect received bytes and bank selector maps EPC offset',async()=>{const e=event(1);e.payload.tag_reads[0].USER='AB'.repeat(256);e.payload.tag_reads[0].TID='CD'.repeat(12);const a=await setup([e]);try{const text=a.doc.querySelector('.capacity').textContent;assert.match(text,/2048 bits · 256 bytes · 128 words/);assert.match(text,/96 bits · 12 bytes · 6 words/);assert.match(text,/ไม่พบข้อมูลจาก reader/);const select=a.doc.getElementById('memoryBank');select.value='EPC';select.dispatchEvent(new a.dom.window.Event('change'));assert.equal(a.doc.getElementById('offset').value,'4');}finally{a.close();}});
+test('EPC is the default memory bank and initializes its safe offset',async()=>{const e=event(1);e.payload.tag_reads[0].USER='AB'.repeat(256);e.payload.tag_reads[0].TID='CD'.repeat(12);const a=await setup([e]);try{const text=a.doc.querySelector('.capacity').textContent;assert.match(text,/2048 bits · 256 bytes · 128 words/);assert.match(text,/96 bits · 12 bytes · 6 words/);assert.match(text,/ไม่พบข้อมูลจาก reader/);const select=a.doc.getElementById('memoryBank');assert.equal(select.value,'EPC');assert.equal(a.doc.getElementById('offset').value,'4');assert.match(a.doc.getElementById('bankNote').textContent,/byte 4/);select.value='USER';select.dispatchEvent(new a.dom.window.Event('change'));assert.equal(a.doc.getElementById('offset').value,'0');}finally{a.close();}});
 
 test('right-side tag details read nested Zebra FX9600 data banks and metadata',async()=>{
  const epc='E2806F12000000022DF13118',e=event(1,epc);
