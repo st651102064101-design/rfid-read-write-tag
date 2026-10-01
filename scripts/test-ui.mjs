@@ -13,14 +13,14 @@ test('public write API rejects malformed commands before forwarding',async()=>{
 });
 async function setup(events=[],options={}){
  let now=Date.now();const errors=[],calls=[],timers=[];
- const state={events,live:[],readers:[],fail:false,writeAvailable:false,...options};
+ const state={events,live:[],readers:[],fail:false,writeAvailable:false,lastWrite:null,...options};
  const vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e));
  const dom=new JSDOM(html,{url:'https://test/',pretendToBeVisual:true,runScripts:'dangerously',virtualConsole:vc,beforeParse(w){
   w.Date.now=()=>now;w.AbortSignal=AbortSignal;
   w.setInterval=(fn,delay)=>{timers.push({fn,delay});return timers.length;};
   Object.defineProperty(w.crypto,'randomUUID',{value:()=> 'test-request-id-1234'});
   w.fetch=async(url,init)=>{calls.push(url);if(state.fail)throw Error('Network unavailable');
-   if(url==='/api/write'&&init?.method==='POST'){const body=JSON.parse(init.body);return {ok:true,json:async()=>({requestId:body.requestId,epc:body.epc,status:'success',verified:true,newEpc:body.epc})};}
+   if(url==='/api/write'&&init?.method==='POST'){const body=JSON.parse(init.body);state.lastWrite=body;return {ok:true,json:async()=>({requestId:body.requestId,epc:body.epc,status:'success',verified:true,newEpc:body.epc})};}
    const body=url.startsWith('/api/write/config')?{ok:true,available:state.writeAvailable}:url.startsWith('/api/reader/status')?{ok:true,readers:state.readers}:url.startsWith('/api/events/live')?{ok:true,events:state.live}:{ok:true,events:state.events,nextBefore:null};
    return {ok:true,json:async()=>body};
   };
@@ -60,15 +60,25 @@ test('user can select a previously read EPC from the dropdown',async()=>{
  }finally{a.close();}
 });
 test('odd byte payloads are never padded and cannot be submitted',async()=>{
- const a=await setup([],{writeAvailable:true});try{assert.equal(a.doc.getElementById('autoPad'),null);const data=a.doc.getElementById('data');data.value='BOX-008';data.dispatchEvent(new a.dom.window.Event('input'));
+ const a=await setup([],{writeAvailable:true});try{assert.equal(a.doc.getElementById('autoPad'),null);const bank=a.doc.getElementById('memoryBank');bank.value='USER';bank.dispatchEvent(new a.dom.window.Event('change'));const data=a.doc.getElementById('data');data.value='BOX-008';data.dispatchEvent(new a.dom.window.Event('input'));
   assert.equal(a.doc.getElementById('length').value,'7');assert.equal(a.doc.getElementById('count').textContent,'7 bytes');assert.match(a.doc.getElementById('paddingNote').textContent,/ไม่เติม 00 อัตโนมัติ/);assert.equal(a.doc.getElementById('write').disabled,true);
   data.value='BOX-0080';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('length').value,'8');assert.equal(a.doc.getElementById('count').textContent,'8 bytes');assert.match(a.doc.getElementById('paddingNote').textContent,/จำนวนไบต์เป็นเลขคู่/);assert.equal(a.doc.getElementById('write').disabled,false);
  }finally{a.close();}
 });
 test('verified write shows a success toast fixed at the bottom-right',async()=>{
- const a=await setup([event(1,'AABB')],{writeAvailable:true});try{const data=a.doc.getElementById('data');data.value='EVEN';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('write').disabled,false);
+ const a=await setup([event(1,'AABB')],{writeAvailable:true});try{const bank=a.doc.getElementById('memoryBank');bank.value='USER';bank.dispatchEvent(new a.dom.window.Event('change'));const data=a.doc.getElementById('data');data.value='EVEN';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('write').disabled,false);
   await a.doc.getElementById('writer').onsubmit(new a.dom.window.Event('submit',{cancelable:true}));const toast=a.doc.getElementById('toast');assert.equal(toast.hidden,false);assert.ok(toast.classList.contains('success'));assert.match(toast.textContent,/เขียนข้อมูลสำเร็จ/);assert.match(a.doc.getElementById('tagDetails').textContent,/EPC · AABB/);
   assert.match(readFileSync('public/style.css','utf8'),/\.toast\{position:fixed;right:24px;bottom:24px/);
+ }finally{a.close();}
+});
+test('ASCII EPC replacement keeps current EPC length and previews all leading zero bytes',async()=>{
+ const original='0000000000424F582D303130',a=await setup([event(1,original)],{writeAvailable:true});try{
+ const select=a.doc.getElementById('epc');select.value=original;select.dispatchEvent(new a.dom.window.Event('change'));
+ const data=a.doc.getElementById('data');data.value='BOX-007';data.dispatchEvent(new a.dom.window.Event('input'));
+ assert.equal(a.doc.getElementById('length').value,'12');assert.equal(a.doc.getElementById('count').textContent,'12 bytes · 00 นำหน้า 5 bytes');
+ assert.match(a.doc.getElementById('paddingNote').textContent,/เติม 00 ด้านหน้า 5 bytes/);assert.match(a.doc.getElementById('paddingNote').textContent,/HEX ที่จะเขียน: 0000000000424F582D303037/);assert.equal(a.doc.getElementById('write').disabled,false);
+ await a.doc.getElementById('writer').onsubmit(new a.dom.window.Event('submit',{cancelable:true}));
+ assert.deepEqual({bank:a.state.lastWrite.memoryBank,offset:a.state.lastWrite.offsetBytes,length:a.state.lastWrite.lengthBytes,epc:a.state.lastWrite.epc,hex:a.state.lastWrite.dataHex},{bank:'EPC',offset:4,length:12,epc:original,hex:'0000000000424F582D303037'});
  }finally{a.close();}
 });
 test('tags are separated by observed USER read capability in cards, dropdown, and editor',async()=>{
