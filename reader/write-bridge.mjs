@@ -2,7 +2,7 @@ import http from 'node:http';
 import https from 'node:https';
 import {createInterface} from 'node:readline';
 import {timingSafeEqual} from 'node:crypto';
-import {readerRecords,recordEpc,recordAccessResults} from './write-bridge-utils.mjs';
+import {readerRecords,recordEpc,recordAccessResults,buildWordWritePlan,writeResultVerified,writeWaitTimeoutMs} from './write-bridge-utils.mjs';
 // Read secrets from hidden stdin, never source or command-line arguments.
 if(process.stdin.isTTY)process.stdin.setRawMode(true);
 const input=createInterface({input:process.stdin,terminal:false});
@@ -18,7 +18,7 @@ function request(path,method='GET',body,auth){return new Promise((resolve,reject
 async function events(after=0){const response=await fetch(site+'/api/events'+(after?'/live?after='+after:''),{signal:AbortSignal.timeout(8000)});if(!response.ok)throw Error('Event API HTTP '+response.status);return (await response.json()).events;}
 function validate(b){
  if(!b||b.operation!=='write'||!['EPC','TID','USER','RESERVED'].includes(b.memoryBank)||!/^(?:[0-9a-f]{2})+$/i.test(b.epc||'')||!/^[a-z0-9-]{8,80}$/i.test(b.requestId||''))throw Error('Invalid write request');
- if(!Number.isSafeInteger(b.offsetBytes)||b.offsetBytes<0||b.offsetBytes%2||!/^(?:[0-9a-f]{4})+$/i.test(b.dataHex||'')||b.dataHex.length>2048||b.lengthBytes!==b.dataHex.length/2)throw Error('Invalid offset or data');
+ if(!Number.isSafeInteger(b.offsetBytes)||b.offsetBytes<0||b.offsetBytes%2||!/^(?:[0-9a-f]{2})+$/i.test(b.dataHex||'')||b.dataHex.length>2048||b.lengthBytes!==b.dataHex.length/2)throw Error('Invalid offset or data');
  if(b.memoryBank==='EPC'&&b.offsetBytes<4)throw Error('EPC data starts at byte 4; CRC/PC are protected');
  if(b.memoryBank==='RESERVED'&&b.offsetBytes+b.lengthBytes>8)throw Error('Reserved password region is bytes 0–7');
  if(b.accessPassword&&!/^[0-9a-f]{8}$/i.test(b.accessPassword))throw Error('Access password must be 8 HEX digits');
@@ -34,21 +34,24 @@ async function write(b){
  if(!tag)throw Error('Target EPC was not found in recent reader events');
  if(b.memoryBank==='EPC'&&b.offsetBytes+b.lengthBytes>epc.length/2+4)throw Error('Write exceeds current EPC length; PC length change is not supported');
  const identity=/^(?:[a-f0-9]{4})+$/i.test(tid||'')?{membank:'TID',pointer:0,length:tid.length*4,mask:tid}:{membank:'EPC',pointer:32,length:epc.length*4,mask:epc};
- const accesses=[];if(b.accessPassword)accesses.push({type:'ACCESS',config:{password:b.accessPassword}});
- const region={membank:b.memoryBank,wordPointer:b.offsetBytes/2,wordCount:b.lengthBytes/2};
- accesses.push({type:'READ',config:region},{type:'WRITE',config:{membank:b.memoryBank,wordPointer:b.offsetBytes/2,data:b.dataHex}},{type:'READ',config:region});
- const mode={type:'CUSTOM',antennas:[Number(d.antenna)||1],transmitPower:[original.transmitPower?.[0]||15],query:{session:'S0',target:'A',sel:'NOT_SL'},selects:[{target:'S0',action:'INVA_INVB',...identity}],accesses,radioStopConditions:{antennaCycles:1}};
+ const planBase={membank:b.memoryBank,wordPointer:b.offsetBytes/2,wordCount:Math.ceil(b.lengthBytes/2)};
  let baseline=Math.max(0,...fresh.map(event=>Number(event.id))),changed=false;const at=Date.now();let result;
  try{
-  await request('/cloud/stop','PUT',null,auth);changed=true;await request('/cloud/mode','PUT',mode,auth);await request('/cloud/start','PUT',null,auth);
+  const makeMode=accesses=>({type:'CUSTOM',antennas:[Number(d.antenna)||1],transmitPower:[original.transmitPower?.[0]||15],query:{session:'S0',target:'A',sel:'NOT_SL'},selects:[{target:'S0',action:'INVA_INVB',...identity}],accesses,radioStopConditions:{antennaCycles:1}});
+  const runPhase=async(accesses,minResults,timeoutMs,acceptedEpcs)=>{
+   const started=Date.now();await request('/cloud/stop','PUT',null,auth);changed=true;await request('/cloud/mode','PUT',makeMode(accesses),auth);await request('/cloud/start','PUT',null,auth);
+   while(Date.now()-started<timeoutMs){await delay(350);const incoming=await events(baseline);for(const event of incoming){baseline=Math.max(baseline,Number(event.id));for(const record of readerRecords(event.payload)){
+    const values=recordAccessResults(record),id=recordEpc(record);if(record.type==='CUSTOM'&&Array.isArray(values)&&values.length>=minResults&&acceptedEpcs.includes(id)&&Date.parse(record.timestamp)>=at-1000)return {record,values};
+   }} }
+   throw Error('Timed out waiting for hardware result. Do not repeat without checking the tag.');
+  };
   const newEpc=b.memoryBank==='EPC'?epc.slice(0,(b.offsetBytes-4)*2)+b.dataHex.toUpperCase()+epc.slice((b.offsetBytes-4+b.lengthBytes)*2):epc;
-  while(Date.now()-at<16000){await delay(350);const incoming=await events(baseline);for(const event of incoming){baseline=Math.max(baseline,Number(event.id));for(const record of readerRecords(event.payload)){
-   const values=recordAccessResults(record),id=recordEpc(record);
-   if(record.type!=='CUSTOM'||!Array.isArray(values)||values.length<3||![epc,newEpc].includes(id)||Date.parse(record.timestamp)<at-1000)continue;
-   const [before,written,after]=values.slice(-3),verified=/^success$/i.test(written)&&typeof after==='string'&&after.toUpperCase()===b.dataHex.toUpperCase();
-   result={requestId:b.requestId,epc,status:verified?'success':'failed',memoryBank:b.memoryBank,offsetBytes:b.offsetBytes,beforeHex:before,afterHex:after,newEpc:verified?newEpc:undefined,verified,message:verified?'Written and read back from FX9600':String(written==='Not Attempted'?before:written),readerEvent:record.data.eventNum};break;
-  }if(result)break;}if(result)break;}
-  if(!result)result={requestId:b.requestId,epc,status:'unknown',verified:false,message:'Timed out waiting for hardware result. Do not repeat without checking the tag.'};
+  const acceptedEpcs=[epc,newEpc];let before;
+  if(b.lengthBytes%2){const readAccesses=[];if(b.accessPassword)readAccesses.push({type:'ACCESS',config:{password:b.accessPassword}});readAccesses.push({type:'READ',config:planBase});const preRead=await runPhase(readAccesses,readAccesses.length,30000,[epc]);before=preRead.values.at(-1);if(typeof before!=='string'||!/^(?:[0-9a-f]{4})+$/i.test(before)||before.length<planBase.wordCount*4)throw Error('Could not read the existing word needed to preserve the adjacent byte; nothing was written');}
+  const plan=buildWordWritePlan(b,before),writeAccesses=[];if(b.accessPassword)writeAccesses.push({type:'ACCESS',config:{password:b.accessPassword}});writeAccesses.push({type:'WRITE',config:{membank:b.memoryBank,wordPointer:b.offsetBytes/2,data:plan.writeHex}},{type:'READ',config:planBase});
+  const completed=await runPhase(writeAccesses,writeAccesses.length,writeWaitTimeoutMs(b.lengthBytes),acceptedEpcs),values=completed.values;
+  const written=values.at(-2),after=values.at(-1),verified=writeResultVerified(b,plan,before,written,after);
+  result={requestId:b.requestId,epc,status:verified?'success':'failed',memoryBank:b.memoryBank,offsetBytes:b.offsetBytes,beforeHex:before,afterHex:after,newEpc:verified?newEpc:undefined,verified,message:verified?'Written and read back from FX9600'+(b.lengthBytes%2?' · adjacent byte preserved':''):String(written==='Not Attempted'?written:written),readerEvent:completed.record.data.eventNum};
  }finally{
   if(changed){try{await request('/cloud/stop','PUT',null,auth);await request('/cloud/mode','PUT',original,auth);if(status.radioActivity==='active')await request('/cloud/start','PUT',null,auth);}catch{if(result)result.resumeWarning='Reader mode could not be restored; check reader console';else throw Error('Operation uncertain and reader mode restore failed');}}
  }

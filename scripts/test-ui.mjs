@@ -60,19 +60,20 @@ test('user can select a previously read EPC from the dropdown',async()=>{
  assert.equal(a.dom.window.document.getElementById('tagDetails').textContent.includes('EPC · AABB'),true);
  }finally{a.close();}
 });
-test('odd byte payloads are never padded and cannot be submitted',async()=>{
+test('odd byte payloads are submitted at exact length without adding 00',async()=>{
  const a=await setup([writableEvent(1)],{writeAvailable:true});try{a.doc.getElementById('epc').value='AABB';a.doc.getElementById('epc').dispatchEvent(new a.dom.window.Event('change'));assert.equal(a.doc.getElementById('autoPad'),null);const bank=a.doc.getElementById('memoryBank');bank.value='USER';bank.dispatchEvent(new a.dom.window.Event('change'));const data=a.doc.getElementById('data');data.value='BOX-008';data.dispatchEvent(new a.dom.window.Event('input'));
-  assert.equal(a.doc.getElementById('length').value,'7');assert.equal(a.doc.getElementById('count').textContent,'7 / 256 bytes');assert.match(a.doc.getElementById('paddingNote').textContent,/ไม่เติม 00 อัตโนมัติ/);assert.equal(a.doc.getElementById('write').disabled,true);
+  assert.equal(a.doc.getElementById('length').value,'7');assert.equal(a.doc.getElementById('count').textContent,'7 / 256 bytes');assert.match(a.doc.getElementById('paddingNote').textContent,/รักษาไบต์ถัดไปเดิม/);assert.equal(a.doc.getElementById('write').disabled,false);
+  await a.doc.getElementById('writer').onsubmit(new a.dom.window.Event('submit',{cancelable:true}));assert.equal(a.state.lastWrite.lengthBytes,7);assert.equal(a.state.lastWrite.dataHex.length,14);assert.equal(a.state.lastWrite.dataHex.endsWith('00'),false);
   data.value='BOX-0080';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('length').value,'8');assert.equal(a.doc.getElementById('count').textContent,'8 / 256 bytes');assert.match(a.doc.getElementById('paddingNote').textContent,/จำนวนไบต์เป็นเลขคู่/);assert.equal(a.doc.getElementById('write').disabled,false);
  }finally{a.close();}
 });
-test('write input is bounded by observed bank capacity and requires at least one word',async()=>{
+test('write input is bounded by observed bank capacity and supports one byte',async()=>{
  const a=await setup([writableEvent(1,'AABB','00'.repeat(4))],{writeAvailable:true});try{
   const select=a.doc.getElementById('epc');select.value='AABB';select.dispatchEvent(new a.dom.window.Event('change'));
   const bank=a.doc.getElementById('memoryBank');bank.value='USER';bank.dispatchEvent(new a.dom.window.Event('change'));
   const data=a.doc.getElementById('data');data.value='ABCDE';data.dispatchEvent(new a.dom.window.Event('input'));
   assert.equal(a.doc.getElementById('write').disabled,true);assert.equal(data.maxLength,4);assert.match(a.doc.getElementById('error').textContent,/สูงสุด 4 bytes/);
-  data.value='A';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('write').disabled,true);assert.match(a.doc.getElementById('error').textContent,/อย่างน้อย 2 bytes/);
+  data.value='A';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('write').disabled,false);assert.match(a.doc.getElementById('count').textContent,/1 \/ 4 bytes/);
   data.value='ABCD';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('write').disabled,false);assert.match(a.doc.getElementById('count').textContent,/4 \/ 4 bytes/);assert.match(a.doc.getElementById('paddingNote').textContent,/วัดได้ 4 bytes/);
   a.doc.getElementById('offset').value='2';a.doc.getElementById('offset').dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('write').disabled,true);assert.match(a.doc.getElementById('error').textContent,/สูงสุด 2 bytes/);
  }finally{a.close();}

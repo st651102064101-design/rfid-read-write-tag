@@ -20,3 +20,18 @@ export function recordAccessResults(record) {
  const data = record?.data && typeof record.data === 'object' ? record.data : record;
  return data?.accessResults;
 }
+
+export function buildWordWritePlan(request,beforeHex){
+ const dataHex=String(request.dataHex||'').toUpperCase(),before=String(beforeHex||'').toUpperCase();
+ if(!/^(?:[0-9A-F]{2})+$/.test(dataHex)||dataHex.length!==request.lengthBytes*2)throw Error('Invalid byte payload');
+ const wordCount=Math.ceil(request.lengthBytes/2),readHexLength=wordCount*4;
+ if(request.lengthBytes%2===0)return {wordCount,readHexLength,writeHex:dataHex};
+ if(!/^(?:[0-9A-F]{4})+$/.test(before)||before.length<readHexLength)throw Error('Could not read the complete tag word before writing');
+ return {wordCount,readHexLength,writeHex:request.lengthBytes%2?dataHex+before.slice(dataHex.length,dataHex.length+2):dataHex};
+}
+export function writeResultVerified(request,plan,before,written,after){
+ const prior=typeof before==='string'?before.toUpperCase():'',readback=typeof after==='string'?after.toUpperCase():'';
+ const preserved=request.lengthBytes%2===0||readback.slice(request.lengthBytes*2,request.lengthBytes*2+2)===prior.slice(request.lengthBytes*2,request.lengthBytes*2+2);
+ return /^success$/i.test(written||'')&&readback===plan.writeHex&&readback.slice(0,request.lengthBytes*2)===request.dataHex.toUpperCase()&&preserved;
+}
+export function writeWaitTimeoutMs(lengthBytes){return Math.min(120000,Math.max(20000,15000+lengthBytes*1600));}
