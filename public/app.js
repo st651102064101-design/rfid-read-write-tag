@@ -33,7 +33,7 @@ function updateTagOptions(force=false){
  for(const choice of choices){const status=userReadStatus(choice.event?.payload,choice.epc),ascii=epcAscii(choice.epc),name=ascii?ascii+' · '+choice.epc:choice.epc;const option=new Option(name+' · '+(choice.pendingRead?'เขียนแล้ว · รอ reader อ่านซ้ำ':status.label+' · อ่านพบ '+choice.count+' ครั้ง'),choice.epc);select.add(option);}
  select.value=choices.some(choice=>choice.epc===selectedEpc)?selectedEpc:'';tagOptionsDirty=false;
 }
-function syncTagSelectionButtons(){for(const button of document.querySelectorAll('.chooseTag[data-epc]')){const selected=button.dataset.epc===selectedEpc;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));button.textContent=selected?'✓ เลือกอยู่ · แตะเพื่อยกเลิก':'เลือกแท็กนี้เพื่อเขียน';button.setAttribute('aria-label',selected?'ยกเลิกการเลือก EPC '+button.dataset.epc:'เลือก EPC '+button.dataset.epc+' ในฟอร์มเขียน');}}
+function syncTagSelectionButtons(){if($('goWrite'))$('goWrite').disabled=!selectedEpc;for(const button of document.querySelectorAll('.chooseTag[data-epc]')){const selected=button.dataset.epc===selectedEpc;button.classList.toggle('selected',selected);button.closest('.eventitem')?.classList.toggle('isSelected',selected);button.setAttribute('aria-pressed',String(selected));button.textContent=selected?'✓ เลือกอยู่ · แตะเพื่อยกเลิก':'เลือกแท็กนี้เพื่อเขียน';button.setAttribute('aria-label',selected?'ยกเลิกการเลือก EPC '+button.dataset.epc:'เลือก EPC '+button.dataset.epc+' ในฟอร์มเขียน');}}
 function selectWrittenEpc(value){const epc=String(value||'').trim().toUpperCase();if(!/^(?:[0-9A-F]{2})+$/.test(epc))return;const current=tagChoices.get(epc);if(!current){tagChoices.set(epc,{epc,count:0,lastAt:new Date().toISOString(),pendingRead:true,event:{id:'write-result-'+Date.now(),receivedAt:new Date().toISOString(),payload:[{type:'INVENTORY',idHex:epc}]}});}selectedEpc=epc;selectionInitialized=true;updateTagOptions(true);const select=$('epc');select.value=epc;updateTagDetails(tagChoices.get(epc));update();syncTagSelectionButtons();}
 const epcSelect=$('epc');epcSelect.addEventListener('change',()=>{selectedEpc=epcSelect.value;selectionInitialized=true;const choice=tagChoices.get(selectedEpc);updateTagDetails(choice?{...choice,count:choice.count}:null);update();syncTagSelectionButtons();});
 epcSelect.addEventListener('blur',()=>{if(tagOptionsDirty)updateTagOptions(true);});
@@ -95,7 +95,7 @@ function renderEvents(events){
   if(item.epc){const action=el('div',undefined,'tagAction'),state=userReadStatus(event.payload,item.epc),badge=el('span',state.label,'tagCapability '+state.key),button=el('button');button.type='button';button.className='chooseTag';button.dataset.epc=item.epc;button.onclick=event=>{event.stopPropagation();if(selectedEpc===item.epc){selectedEpc='';selectionInitialized=true;updateTagOptions(true);$('epc').value='';updateTagDetails(null);update();syncTagSelectionButtons();return;}selectedEpc=item.epc;selectionInitialized=true;updateTagOptions(true);$('epc').value=item.epc;updateTagDetails(tagChoices.get(item.epc)||item);update();syncTagSelectionButtons();$('writer').scrollIntoView({behavior:'smooth',block:'start'});$('epc').focus({preventScroll:true});};action.append(badge,button);itemRow.append(action);}
   feedList.append(itemRow);
  }
- syncTagSelectionButtons();
+ syncTagSelectionButtons();filterTagList();
 }
 function readSummary(events){const epcs=new Set();let reads=0;for(const event of events){const values=findEpcs(event.payload);reads+=values.length;for(const epc of values)epcs.add(epc);}return epcs.size+' แท็กไม่ซ้ำ · '+reads+' ครั้งที่อ่าน';}
 async function loadEvents(before=null,manual=false){
@@ -219,3 +219,8 @@ async function writerStatus(){try{const response=await fetch('/api/write/config'
 
 
 
+
+function filterTagList(){const query=($('tagSearch')?.value||'').trim().toLowerCase();let matches=0;const rows=[...feedList.querySelectorAll('.eventitem')];for(const row of rows){const epc=row.querySelector('.chooseTag')?.dataset.epc||'';row.hidden=!!query&&!((epcAscii(epc)||'')+' '+epc).toLowerCase().includes(query);if(!row.hidden)matches++;}const status=$('searchStatus');if(status){status.hidden=!query;status.textContent=matches?'พบ '+matches+' แท็ก':'ไม่พบแท็กที่ตรงกับคำค้น';}}
+$('tagSearch')?.addEventListener('input',filterTagList);
+$('goWrite')?.addEventListener('click',()=>{$('writer').scrollIntoView({behavior:'smooth',block:'start'});$('data').focus({preventScroll:true});});
+const editorPanel=document.querySelector('.editor');function updateEditorSticky(){if(editorPanel)editorPanel.style.setProperty('--editor-top',Math.min(16,window.innerHeight-editorPanel.getBoundingClientRect().height-16)+'px');}if(typeof ResizeObserver!=='undefined'&&editorPanel)new ResizeObserver(updateEditorSticky).observe(editorPanel);window.addEventListener('resize',updateEditorSticky);updateEditorSticky();
