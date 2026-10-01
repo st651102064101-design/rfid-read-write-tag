@@ -99,5 +99,5 @@ export default {async fetch(request,env){
   }
   if(url.pathname==='/'&&request.method==='GET')return new Response(page,{headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-cache'}});
   return json({ok:false,error:'Not found'},404);
- }catch(e){console.error('RFID storage error',e.message);return json({ok:false,error:'ระบบจัดเก็บข้อมูลยังไม่พร้อม กรุณาลองอีกครั้ง'},503);}
+ }catch(e){console.error('RFID storage error',e.message);return json({ok:false,error:'Data storage is unavailable. Please try again.'},503);}
 }};
