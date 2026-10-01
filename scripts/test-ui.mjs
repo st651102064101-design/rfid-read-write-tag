@@ -100,7 +100,13 @@ test('verified write shows a success toast fixed at the bottom-right',async()=>{
 test('unconfirmed writes show the bridge reason instead of a generic warning',async()=>{
  const reason='Timed out waiting for hardware result. Do not repeat without checking the tag.',a=await setup([writableEvent(1,'AABB')],{writeAvailable:true,writeResult:body=>({requestId:body.requestId,epc:body.epc,status:'unknown',verified:false,message:reason})});try{a.doc.getElementById('epc').value='AABB';a.doc.getElementById('epc').dispatchEvent(new a.dom.window.Event('change'));
  const bank=a.doc.getElementById('memoryBank');bank.value='USER';bank.dispatchEvent(new a.dom.window.Event('change'));const data=a.doc.getElementById('data');data.value='EVEN';data.dispatchEvent(new a.dom.window.Event('input'));
- await a.doc.getElementById('writer').onsubmit(new a.dom.window.Event('submit',{cancelable:true}));assert.match(a.doc.getElementById('toast').textContent,new RegExp(reason.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));assert.match(a.doc.getElementById('result').textContent,/USER · 4 bytes/);assert.match(a.doc.getElementById('result').textContent,/ตรวจอ่านแท็กก่อนส่งซ้ำ/);
+ await a.doc.getElementById('writer').onsubmit(new a.dom.window.Event('submit',{cancelable:true}));assert.match(a.doc.getElementById('toast').textContent,/ไม่ได้รับผลยืนยันจาก FX9600/);assert.match(a.doc.getElementById('result').textContent,/USER · 4 bytes/);assert.match(a.doc.getElementById('result').textContent,/ป้องกันการเขียนซ้ำ/);
+ }finally{a.close();}
+});
+test('insufficient-power tag error explains RF checks instead of implying a data-size issue',async()=>{
+ const a=await setup([writableEvent(1,'AABB')],{writeAvailable:true,writeResult:body=>({requestId:body.requestId,epc:body.epc,status:'failed',verified:false,message:'Error: tag returned error code 0x0b = Insufficient power'})});try{
+  a.doc.getElementById('epc').value='AABB';a.doc.getElementById('epc').dispatchEvent(new a.dom.window.Event('change'));const bank=a.doc.getElementById('memoryBank');bank.value='USER';bank.dispatchEvent(new a.dom.window.Event('change'));const data=a.doc.getElementById('data');data.value='55';data.dispatchEvent(new a.dom.window.Event('input'));
+  await a.doc.getElementById('writer').onsubmit(new a.dom.window.Event('submit',{cancelable:true}));assert.match(a.doc.getElementById('toast').textContent,/พลังงาน RF ที่แท็กได้รับไม่พอ/);assert.match(a.doc.getElementById('result').textContent,/TX Power/);assert.match(a.doc.getElementById('result').textContent,/ห้ามเกินข้อจำกัด/);
  }finally{a.close();}
 });
 test('ASCII EPC replacement keeps current EPC length and previews all leading zero bytes',async()=>{
