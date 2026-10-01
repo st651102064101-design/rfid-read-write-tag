@@ -12,13 +12,13 @@ test('public write API rejects malformed commands before forwarding',async()=>{
 });
 async function setup(events=[],options={}){
  let now=Date.now();const errors=[],calls=[],timers=[];
- const state={events,live:[],readers:[],fail:false,...options};
+ const state={events,live:[],readers:[],fail:false,writeAvailable:false,...options};
  const vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e));
  const dom=new JSDOM(html,{url:'https://test/',pretendToBeVisual:true,runScripts:'dangerously',virtualConsole:vc,beforeParse(w){
   w.Date.now=()=>now;w.AbortSignal=AbortSignal;
   w.setInterval=(fn,delay)=>{timers.push({fn,delay});return timers.length;};
   w.fetch=async url=>{calls.push(url);if(state.fail)throw Error('Network unavailable');
-   const body=url.startsWith('/api/reader/status')?{ok:true,readers:state.readers}:url.startsWith('/api/events/live')?{ok:true,events:state.live}:{ok:true,events:state.events,nextBefore:null};
+   const body=url.startsWith('/api/write/config')?{ok:true,available:state.writeAvailable}:url.startsWith('/api/reader/status')?{ok:true,readers:state.readers}:url.startsWith('/api/events/live')?{ok:true,events:state.live}:{ok:true,events:state.events,nextBefore:null};
    return {ok:true,json:async()=>body};
   };
  }});
@@ -57,9 +57,9 @@ test('user can select a previously read EPC from the dropdown',async()=>{
  }finally{a.close();}
 });
 test('odd byte payloads are never padded and cannot be submitted',async()=>{
- const a=await setup();try{assert.equal(a.doc.getElementById('autoPad'),null);const data=a.doc.getElementById('data');data.value='BOX-008';data.dispatchEvent(new a.dom.window.Event('input'));
+ const a=await setup([],{writeAvailable:true});try{assert.equal(a.doc.getElementById('autoPad'),null);const data=a.doc.getElementById('data');data.value='BOX-008';data.dispatchEvent(new a.dom.window.Event('input'));
   assert.equal(a.doc.getElementById('length').value,'7');assert.equal(a.doc.getElementById('count').textContent,'7 bytes');assert.match(a.doc.getElementById('paddingNote').textContent,/ไม่เติม 00 อัตโนมัติ/);assert.equal(a.doc.getElementById('write').disabled,true);
-  data.value='BOX-0080';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('length').value,'8');assert.equal(a.doc.getElementById('count').textContent,'8 bytes');assert.match(a.doc.getElementById('paddingNote').textContent,/จำนวนไบต์เป็นเลขคู่/);
+  data.value='BOX-0080';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('length').value,'8');assert.equal(a.doc.getElementById('count').textContent,'8 bytes');assert.match(a.doc.getElementById('paddingNote').textContent,/จำนวนไบต์เป็นเลขคู่/);assert.equal(a.doc.getElementById('write').disabled,false);
  }finally{a.close();}
 });
 test('tags are separated by observed USER read capability in cards, dropdown, and editor',async()=>{
