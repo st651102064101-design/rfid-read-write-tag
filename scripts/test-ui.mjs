@@ -29,6 +29,7 @@ async function setup(events=[],options={}){
  return {dom,state,errors,calls,timers,doc:dom.window.document,advance:ms=>{now+=ms;},async tick(delay){for(const t of timers.filter(t=>t.delay===delay))t.fn();await new Promise(resolve=>setImmediate(resolve));},close(){dom.window.close();}};
 }
 const event=(id,epc='AABB',age=0)=>({id,receivedAt:new Date(Date.now()-age).toISOString(),payload:{tag_reads:[{epc,isHeartBeat:'false'}]}});
+const writableEvent=(id,epc='AABB',user='00'.repeat(256))=>({...event(id,epc),payload:[{type:'INVENTORY',data:{idHex:epc,USER:user}}]});
 test('verified CUSTOM reader profile maps banks without confusing other readers',async()=>{
  const epc='0000000000424F582D303037';const e=event(1,epc);e.payload=[{type:'CUSTOM',timestamp:'2026-10-01T05:42:00Z',data:{idHex:epc,MAC:'C4:7D:CC:74:AF:20',accessResults:['80e23000'+epc,'e280689420005026ce01a477','0000000000000000','Error: tag returned error code 0x03 = Memory overrun']}}];
  const a=await setup([e]);try{const panel=a.doc.getElementById('tagDetails');assert.match(panel.querySelector('[data-memory="EPC"]').textContent,/128 bits/);assert.match(panel.querySelector('[data-memory="TID"]').textContent,/96 bits/);assert.match(panel.querySelector('[data-memory="RESERVED"]').textContent,/64 bits/);assert.match(panel.querySelector('[data-memory="USER"]').textContent,/อ่านเกินขอบเขต/);}finally{a.close();}
@@ -60,13 +61,30 @@ test('user can select a previously read EPC from the dropdown',async()=>{
  }finally{a.close();}
 });
 test('odd byte payloads are never padded and cannot be submitted',async()=>{
- const a=await setup([],{writeAvailable:true});try{assert.equal(a.doc.getElementById('autoPad'),null);const bank=a.doc.getElementById('memoryBank');bank.value='USER';bank.dispatchEvent(new a.dom.window.Event('change'));const data=a.doc.getElementById('data');data.value='BOX-008';data.dispatchEvent(new a.dom.window.Event('input'));
-  assert.equal(a.doc.getElementById('length').value,'7');assert.equal(a.doc.getElementById('count').textContent,'7 bytes');assert.match(a.doc.getElementById('paddingNote').textContent,/ไม่เติม 00 อัตโนมัติ/);assert.equal(a.doc.getElementById('write').disabled,true);
-  data.value='BOX-0080';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('length').value,'8');assert.equal(a.doc.getElementById('count').textContent,'8 bytes');assert.match(a.doc.getElementById('paddingNote').textContent,/จำนวนไบต์เป็นเลขคู่/);assert.equal(a.doc.getElementById('write').disabled,false);
+ const a=await setup([writableEvent(1)],{writeAvailable:true});try{a.doc.getElementById('epc').value='AABB';a.doc.getElementById('epc').dispatchEvent(new a.dom.window.Event('change'));assert.equal(a.doc.getElementById('autoPad'),null);const bank=a.doc.getElementById('memoryBank');bank.value='USER';bank.dispatchEvent(new a.dom.window.Event('change'));const data=a.doc.getElementById('data');data.value='BOX-008';data.dispatchEvent(new a.dom.window.Event('input'));
+  assert.equal(a.doc.getElementById('length').value,'7');assert.equal(a.doc.getElementById('count').textContent,'7 / 256 bytes');assert.match(a.doc.getElementById('paddingNote').textContent,/ไม่เติม 00 อัตโนมัติ/);assert.equal(a.doc.getElementById('write').disabled,true);
+  data.value='BOX-0080';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('length').value,'8');assert.equal(a.doc.getElementById('count').textContent,'8 / 256 bytes');assert.match(a.doc.getElementById('paddingNote').textContent,/จำนวนไบต์เป็นเลขคู่/);assert.equal(a.doc.getElementById('write').disabled,false);
+ }finally{a.close();}
+});
+test('write input is bounded by observed bank capacity and requires at least one word',async()=>{
+ const a=await setup([writableEvent(1,'AABB','00'.repeat(4))],{writeAvailable:true});try{
+  const select=a.doc.getElementById('epc');select.value='AABB';select.dispatchEvent(new a.dom.window.Event('change'));
+  const bank=a.doc.getElementById('memoryBank');bank.value='USER';bank.dispatchEvent(new a.dom.window.Event('change'));
+  const data=a.doc.getElementById('data');data.value='ABCDE';data.dispatchEvent(new a.dom.window.Event('input'));
+  assert.equal(a.doc.getElementById('write').disabled,true);assert.equal(data.maxLength,4);assert.match(a.doc.getElementById('error').textContent,/สูงสุด 4 bytes/);
+  data.value='A';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('write').disabled,true);assert.match(a.doc.getElementById('error').textContent,/อย่างน้อย 2 bytes/);
+  data.value='ABCD';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('write').disabled,false);assert.match(a.doc.getElementById('count').textContent,/4 \/ 4 bytes/);assert.match(a.doc.getElementById('paddingNote').textContent,/วัดได้ 4 bytes/);
+  a.doc.getElementById('offset').value='2';a.doc.getElementById('offset').dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('write').disabled,true);assert.match(a.doc.getElementById('error').textContent,/สูงสุด 2 bytes/);
+ }finally{a.close();}
+});
+test('unknown or unreadable bank capacity blocks writes with an explanation',async()=>{
+ const e=event(1,'CCDD');e.payload=[{type:'INVENTORY',data:{idHex:'CCDD',USER:'Error: tag returned error code 0x03 = Memory overrun'}}];const a=await setup([e],{writeAvailable:true});try{
+  a.doc.getElementById('epc').value='CCDD';a.doc.getElementById('epc').dispatchEvent(new a.dom.window.Event('change'));const bank=a.doc.getElementById('memoryBank');bank.value='USER';bank.dispatchEvent(new a.dom.window.Event('change'));
+  const data=a.doc.getElementById('data');data.value='ABCD';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('write').disabled,true);assert.match(a.doc.getElementById('error').textContent,/ยังไม่ทราบขนาด USER/);assert.equal(data.hasAttribute('maxlength'),false);
  }finally{a.close();}
 });
 test('switching ASCII and HEX preserves the entered bytes',async()=>{
- const a=await setup([],{writeAvailable:true});try{
+ const a=await setup([writableEvent(1)],{writeAvailable:true});try{a.doc.getElementById('epc').value='AABB';a.doc.getElementById('epc').dispatchEvent(new a.dom.window.Event('change'));
  const bank=a.doc.getElementById('memoryBank');bank.value='USER';bank.dispatchEvent(new a.dom.window.Event('change'));
  const data=a.doc.getElementById('data'),ascii=a.doc.querySelector('[name=format][value="ASCII"]'),hex=a.doc.querySelector('[name=format][value="HEX"]');data.value='BOX-0070';data.dispatchEvent(new a.dom.window.Event('input'));
  hex.checked=true;hex.dispatchEvent(new a.dom.window.Event('change'));assert.equal(data.value,'424F582D30303730');assert.equal(a.doc.getElementById('length').value,'8');assert.equal(a.doc.getElementById('write').disabled,false);
@@ -74,13 +92,13 @@ test('switching ASCII and HEX preserves the entered bytes',async()=>{
  }finally{a.close();}
 });
 test('verified write shows a success toast fixed at the bottom-right',async()=>{
- const a=await setup([event(1,'AABB')],{writeAvailable:true});try{const bank=a.doc.getElementById('memoryBank');bank.value='USER';bank.dispatchEvent(new a.dom.window.Event('change'));const data=a.doc.getElementById('data');data.value='EVEN';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('write').disabled,false);
+ const a=await setup([writableEvent(1,'AABB')],{writeAvailable:true});try{a.doc.getElementById('epc').value='AABB';a.doc.getElementById('epc').dispatchEvent(new a.dom.window.Event('change'));const bank=a.doc.getElementById('memoryBank');bank.value='USER';bank.dispatchEvent(new a.dom.window.Event('change'));const data=a.doc.getElementById('data');data.value='EVEN';data.dispatchEvent(new a.dom.window.Event('input'));assert.equal(a.doc.getElementById('write').disabled,false);
   await a.doc.getElementById('writer').onsubmit(new a.dom.window.Event('submit',{cancelable:true}));const toast=a.doc.getElementById('toast');assert.equal(toast.hidden,false);assert.ok(toast.classList.contains('success'));assert.match(toast.textContent,/เขียนข้อมูลสำเร็จ/);assert.match(a.doc.getElementById('tagDetails').textContent,/EPC · AABB/);
   assert.match(readFileSync('public/style.css','utf8'),/\.toast\{position:fixed;right:24px;bottom:24px/);
  }finally{a.close();}
 });
 test('unconfirmed writes show the bridge reason instead of a generic warning',async()=>{
- const reason='Timed out waiting for hardware result. Do not repeat without checking the tag.',a=await setup([event(1,'AABB')],{writeAvailable:true,writeResult:body=>({requestId:body.requestId,epc:body.epc,status:'unknown',verified:false,message:reason})});try{
+ const reason='Timed out waiting for hardware result. Do not repeat without checking the tag.',a=await setup([writableEvent(1,'AABB')],{writeAvailable:true,writeResult:body=>({requestId:body.requestId,epc:body.epc,status:'unknown',verified:false,message:reason})});try{a.doc.getElementById('epc').value='AABB';a.doc.getElementById('epc').dispatchEvent(new a.dom.window.Event('change'));
  const bank=a.doc.getElementById('memoryBank');bank.value='USER';bank.dispatchEvent(new a.dom.window.Event('change'));const data=a.doc.getElementById('data');data.value='EVEN';data.dispatchEvent(new a.dom.window.Event('input'));
  await a.doc.getElementById('writer').onsubmit(new a.dom.window.Event('submit',{cancelable:true}));assert.match(a.doc.getElementById('toast').textContent,new RegExp(reason.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));assert.match(a.doc.getElementById('result').textContent,/USER · 4 bytes/);assert.match(a.doc.getElementById('result').textContent,/ตรวจอ่านแท็กก่อนส่งซ้ำ/);
  }finally{a.close();}
@@ -89,7 +107,7 @@ test('ASCII EPC replacement keeps current EPC length and previews all leading ze
  const original='0000000000424F582D303130',a=await setup([event(1,original)],{writeAvailable:true});try{
  const select=a.doc.getElementById('epc');select.value=original;select.dispatchEvent(new a.dom.window.Event('change'));
  const data=a.doc.getElementById('data');data.value='BOX-007';data.dispatchEvent(new a.dom.window.Event('input'));
- assert.equal(a.doc.getElementById('length').value,'12');assert.equal(a.doc.getElementById('count').textContent,'12 bytes · 00 นำหน้า 5 bytes');
+  assert.equal(a.doc.getElementById('length').value,'12');assert.equal(a.doc.getElementById('count').textContent,'12 / 12 bytes');
  assert.match(a.doc.getElementById('paddingNote').textContent,/เติม 00 ด้านหน้า 5 bytes/);assert.match(a.doc.getElementById('paddingNote').textContent,/HEX ที่จะเขียน: 0000000000424F582D303037/);assert.equal(a.doc.getElementById('write').disabled,false);
  await a.doc.getElementById('writer').onsubmit(new a.dom.window.Event('submit',{cancelable:true}));
  assert.deepEqual({bank:a.state.lastWrite.memoryBank,offset:a.state.lastWrite.offsetBytes,length:a.state.lastWrite.lengthBytes,epc:a.state.lastWrite.epc,hex:a.state.lastWrite.dataHex},{bank:'EPC',offset:4,length:12,epc:original,hex:'0000000000424F582D303037'});
