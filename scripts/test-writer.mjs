@@ -56,3 +56,6 @@ test('outbound writer queue claims once and returns verified result with request
  assert.equal((await post('/api/write',body,'bad')).status,202);
  }finally{db.close();}
 });
+import {measureOperation} from '../reader/operation-timing.mjs';
+test('operation timing measures asynchronous work in milliseconds and preserves the result',async()=>{let now=100;const result=await measureOperation(async()=>{await Promise.resolve();now=1334.6;return {status:'success',verified:true};},()=>now);assert.deepEqual(result,{status:'success',verified:true,durationMs:1235});});
+test('operation failures retain elapsed milliseconds without becoming success',async()=>{let now=10;const failure=Error('Reader rejected write');await assert.rejects(measureOperation(async()=>{now=260;throw failure;},()=>now),error=>error===failure&&error.durationMs===250);});
