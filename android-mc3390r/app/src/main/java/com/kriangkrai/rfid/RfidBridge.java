@@ -1,6 +1,9 @@
 package com.kriangkrai.rfid;
 
 import android.content.Context;
+import android.content.pm.ApplicationInfo;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -17,6 +20,8 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /** SDK calls and access operations share one executor; SDK events never wait on it. */
 public final class RfidBridge {
@@ -27,6 +32,12 @@ public final class RfidBridge {
     private final Object inventoryMonitor = new Object();
     private final AntennaInfo antenna = new AntennaInfo(new short[]{1});
     private final LinkedHashMap<String, Completed> completed = new LinkedHashMap<>();
+    private final ScanBeepGate beepGate = new ScanBeepGate();
+    private final AtomicBoolean beepPending = new AtomicBoolean();
+    private final AtomicInteger beepEpoch = new AtomicInteger();
+    private final boolean debugBuild;
+    // Created, used, stopped, and released only on the main thread.
+    private ToneGenerator scanTone;
     private Readers readers;
     private volatile RFIDReader reader;
     private final EventHandler events = new EventHandler();
@@ -44,7 +55,11 @@ public final class RfidBridge {
     private boolean powerStateSupported = true;
     private String powerStateDiagnostic = "Not queried";
 
-    RfidBridge(Context context, WebView web) { this.context = context; this.web = web; }
+    RfidBridge(Context context, WebView web) {
+        this.context = context;
+        this.web = web;
+        debugBuild = (context.getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+    }
     void pageReady() { emitState(); }
     void resume() { foreground = true; if (!disposed) emitState(); }
 
@@ -222,6 +237,7 @@ public final class RfidBridge {
         int index = WritePolicy.powerIndex(powerValues, dbm);
         boolean resume = reading;
         accessing = true;
+        beepEpoch.incrementAndGet();
         JSONObject result;
         try {
             if (resume) setReading(false);
@@ -248,6 +264,7 @@ public final class RfidBridge {
         long password = WritePolicy.password(passwordText);
         boolean resume = reading;
         accessing = true;
+        beepEpoch.incrementAndGet();
         JSONObject values = new JSONObject(), errors = new JSONObject();
         try {
             if (resume) setReading(false);
@@ -339,6 +356,7 @@ public final class RfidBridge {
         long password = WritePolicy.password(passwordText);
         boolean resume = reading, issued = false;
         accessing = true;
+        beepEpoch.incrementAndGet();
         JSONObject result;
         try {
             if (resume) setReading(false);
@@ -436,8 +454,31 @@ public final class RfidBridge {
         evaluate("window.NativeRfid && window.NativeRfid.state(" + state + ")");
     }
 
+    private boolean scanBeepEligible() {
+        return initialized && !connectionLost && foreground && readingKnown && reading && !accessing && !disposed;
+    }
+
+    /** No audio service calls on the SDK read callback; at most one beep is pending. */
+    private void queueScanBeep() {
+        if (!scanBeepEligible() || !beepPending.compareAndSet(false, true)) return;
+        int epoch = beepEpoch.get();
+        main.post(() -> {
+            beepPending.set(false);
+            if (!beepGate.shouldPlay(SystemClock.elapsedRealtime(), scanBeepEligible() && epoch == beepEpoch.get(), true)) return;
+            try {
+                if (scanTone == null) scanTone = new ToneGenerator(AudioManager.STREAM_MUSIC, 80);
+                boolean accepted = scanTone.startTone(ToneGenerator.TONE_PROP_BEEP, 80);
+                if (accepted && debugBuild) Log.d("MC3390R.Rfid", "Scan beep accepted at " + SystemClock.elapsedRealtime() + " ms");
+            } catch (RuntimeException error) {
+                Log.w("MC3390R.Rfid", "Scan sound unavailable", error);
+            }
+        });
+    }
+
     void pause() {
         foreground = false;
+        beepEpoch.incrementAndGet();
+        main.post(() -> { if (scanTone != null) scanTone.stopTone(); });
         if (disposed) return;
         executor.execute(() -> {
             continuousReading = false;
@@ -449,10 +490,15 @@ public final class RfidBridge {
     void dispose() {
         disposed = true;
         foreground = false;
+        beepEpoch.incrementAndGet();
+        main.post(() -> {
+            if (scanTone != null) { scanTone.stopTone(); scanTone.release(); scanTone = null; }
+        });
         executor.execute(this::releaseReader);
         executor.shutdown();
     }
     private void releaseReader() {
+        beepEpoch.incrementAndGet();
         RFIDReader rd = reader;
         if (rd != null) {
             try { if (rd.isConnected()) { rd.Actions.Inventory.stop(); } } catch (Exception ignored) { }
@@ -481,9 +527,10 @@ public final class RfidBridge {
                 JSONArray batch = new JSONArray();
                 for (TagData tag : tags) {
                     String epc = tag.getTagID();
-                    if (epc != null && epc.matches("[A-Fa-f0-9]+"))
+                    if (ScanBeepGate.isCompleteEpc(epc))
                         batch.put(new JSONObject().put("epc", epc.toUpperCase(Locale.ROOT)).put("rssi", tag.getPeakRSSI()));
                 }
+                if (batch.length() > 0) queueScanBeep();
                 evaluate("window.NativeRfid && window.NativeRfid.tags(" + batch + ")");
             } catch (Exception error) { message = explain(error); emitState(); }
         }
@@ -492,6 +539,7 @@ public final class RfidBridge {
             STATUS_EVENT_TYPE type = event.StatusEventData.getStatusEventType();
             Log.d("MC3390R.Rfid", "SDK status: " + type);
             if (type == STATUS_EVENT_TYPE.INVENTORY_START_EVENT || type == STATUS_EVENT_TYPE.INVENTORY_STOP_EVENT) {
+                if (type == STATUS_EVENT_TYPE.INVENTORY_STOP_EVENT) beepEpoch.incrementAndGet();
                 synchronized (inventoryMonitor) {
                     reading = type == STATUS_EVENT_TYPE.INVENTORY_START_EVENT;
                     readingKnown = true;
@@ -499,6 +547,7 @@ public final class RfidBridge {
                 }
                 emitState();
             } else if (type == STATUS_EVENT_TYPE.DISCONNECTION_EVENT) {
+                beepEpoch.incrementAndGet();
                 connectionLost = true;
                 synchronized (inventoryMonitor) { reading = false; readingKnown = false; inventoryMonitor.notifyAll(); }
                 message = "Reader disconnected";

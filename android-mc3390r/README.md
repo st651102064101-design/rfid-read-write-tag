@@ -28,6 +28,8 @@ Wireless ADB was tested on this Android 8.1 device. Enable USB debugging and aut
 
 Install the APK on the MC3390R. Keep Zebra RFID Manager installed and configure the correct regulatory region in the Zebra utility beforehand. This app does not select an arbitrary region automatically. Close other apps that are holding the RFID reader connection.
 
+Valid inventory reads play an 80 ms scan beep, limited to one sound per 300 ms during continuous scanning. Beeps follow the device media volume; the physical volume buttons adjust that stream while this app is open. Beeps stop when the app is backgrounded. Memory access and connection setup do not beep.
+
 Connect reader, turn on reading or pull the trigger, then select a detected tag once. Choose a memory bank, Text or HEX, and enter data. Readable memory is loaded for the selected tag; observed read length is used as a conservative input limit and is not advertised as the physical chip capacity. Memory bank errors remain visible in Tag information. Write results contain milliseconds for the native operation and total elapsed time. Native reader errors are reported without automatically repeating an uncertain write.
 
 EPC starts at byte 4 to preserve CRC and PC. EPC size is preserved. Odd byte lengths pre-read the final word and preserve its adjacent byte. Sensitive TID/RESERVED writes need explicit confirmation; the reader's permissions and locks still apply. A successful write is followed by a targeted read-back. A partial or unconfirmed operation must be checked before retrying.

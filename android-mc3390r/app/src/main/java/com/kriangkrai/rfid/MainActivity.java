@@ -2,6 +2,7 @@ package com.kriangkrai.rfid;
 
 import android.app.Activity;
 import android.content.pm.ApplicationInfo;
+import android.media.AudioManager;
 import android.os.Bundle;
 import android.view.WindowManager;
 import android.webkit.WebChromeClient;
@@ -18,6 +19,7 @@ public final class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        setVolumeControlStream(AudioManager.STREAM_MUSIC);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setTitle("RFID Live & Write");
         WebView.setWebContentsDebuggingEnabled((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0);

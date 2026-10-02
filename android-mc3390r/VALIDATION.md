@@ -4,7 +4,7 @@ Validated on 2026-10-02 with the user's MC3390R, Android 8.1.0 (API 27), Zebra R
 
 ## Automated checks
 
-- `gradlew.bat :app:testDebugUnitTest :app:assembleDebug`: successful build, 7 Java unit tests, zero failures/errors.
+- `gradlew.bat :app:testDebugUnitTest :app:assembleDebug`: successful build, 12 Java unit tests, zero failures/errors (7 write/power tests and 5 scan-sound tests).
 - `node --test scripts/test-mobile.mjs`: 23 mobile UI and native transport contract tests passed. These use mock callbacks and are not hardware tests.
 - The Java tests cover strict payload validation, EPC CRC/PC protection, sensitive memory confirmation, odd-byte neighbor preservation, exact pre-read requirements, and real serial power-table conversion.
 
@@ -38,3 +38,9 @@ Original tag contents were saved locally before the write. Test data remains on 
 ## Limits of these checks
 
 The designated tag has no readable USER memory. A 256-byte USER write, other chips, TID/RESERVED writes, locked/password-protected tags and a physical trigger press were not hardware-tested here. Java and UI tests verify their validation paths but do not establish physical performance. Physical device power on/off and destructive reset/kill/lock controls are not part of this app.
+
+## Scan sound update (1.0.1)
+
+Installed versionCode 2 over Wi-Fi on 2026-10-02. Actual SDK inventory and handheld-trigger events were observed with live tag data. Debug logs confirmed successful native ToneGenerator starts spaced approximately 300 ms apart; Android AudioFlinger showed this app's STREAM_MUSIC AudioTrack rendering frames to the speaker output. The device's existing volume/mute values were not changed. This confirms the native playback path; subjective audibility is being checked with the user.
+
+Five unit tests cover valid complete-byte EPCs, empty/invalid batches, the 300 ms boundary, inactive/lifecycle suppression, monotonic clock validation and no accumulated sounds after long gaps. Queued sound callbacks are invalidated on inventory stop, memory access, disconnect, backgrounding and disposal. Audio runs on the main thread; the SDK callback never waits for sound playback. No physical tag write was performed for this audio update.
