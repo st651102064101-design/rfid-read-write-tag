@@ -17,3 +17,5 @@ Read profile: reader/read-all-mode.json. CUSTOM accessResults order is EPC (incl
 Build: node scripts/build.mjs
 Tests: node --test scripts/test-ui.mjs scripts/test-writer.mjs
 Migration generation: node node_modules/drizzle-kit/bin.cjs generate
+
+Reader recovery: run pwsh -File reader/reconnect-reader.ps1 to reload a disconnected HTTP POST gateway without changing its endpoint or radio settings. The command verifies fresh EPC events on the Site; heartbeat alone is not treated as successful tag delivery. Local reader address was updated after its DHCP address changed.
