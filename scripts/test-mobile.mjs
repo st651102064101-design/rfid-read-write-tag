@@ -105,7 +105,7 @@ test('an SDK success without read-back verification does not show a successful w
 
 test('SDK read-only bank errors are shown as failures and do not replace the target',async()=>{
  const a=await setup({ui:true,connected:true});try{
-  await a.scan();choose(a);await readBanks(a,{TID:'00'.repeat(12)});bank(a,'TID');input(a,'AB');a.doc.getElementById('confirmSensitive').checked=true;
+  await a.scan();choose(a);await readBanks(a,{TID:'00'.repeat(12)});bank(a,'TID');input(a,'AB');a.doc.getElementById('confirmSensitive').checked=true;a.doc.getElementById('confirmSensitive').dispatchEvent(new a.w.Event('change'));
   const pending=a.doc.getElementById('writer').onsubmit(new a.w.Event('submit',{cancelable:true}));await flush();
   a.reply('write',{status:'failed',verified:false,message:'TID memory is read-only on this tag',durationMs:19});await a.delay(600);await pending;
   assert.match(a.doc.getElementById('result').textContent,/Write failed/);assert.match(a.doc.getElementById('result').textContent,/read-only/);assert.equal(a.doc.getElementById('epc').value,epc);assert.equal(a.doc.getElementById('result').classList.contains('success'),false);
@@ -290,5 +290,29 @@ test('memory reads do not refresh the last inventory timestamp or count as scans
   const pending=a.w.NativeRfid.command('banks',{epc});a.reply('banks',{status:'success',banks:{TID:'E2801234'}});await pending;
   const after=(await(await a.w.fetch('/api/events')).json()).events[0];
   assert.equal(after.receivedAt,before.receivedAt);assert.equal(after.payload[0].type,'MEMORY_READ');assert.equal(after.payload[0].data.TID,'E2801234');
+ }finally{a.close();}
+});
+
+for(const memoryBank of ['EPC','USER','TID','RESERVED']){
+ test(memoryBank+' write preserves bank, target, password and unconfirmed hardware errors',async()=>{
+  const a=await setup({connected:true});try{
+   const body={requestId:'bank-write-'+memoryBank,operation:'write',epc,memoryBank,offsetBytes:memoryBank==='EPC'?4:0,lengthBytes:3,dataHex:'414243',accessPassword:'FFFFFFFF',confirmSensitive:true};
+   await post(a.w,'/api/write',body);assert.deepEqual(JSON.parse(JSON.stringify(a.last('write').body)),body);
+   a.reply('write',{status:'unknown',verified:false,message:'Write failed: access locked'});await flush();
+   const r=await result(a.w,body.requestId);assert.equal(r.status,'unknown');assert.equal(r.verified,false);assert.equal(r.epc,epc);assert.match(r.message,/locked/);
+   await post(a.w,'/api/write',body);assert.equal(a.commands.filter(c=>c.operation==='write').length,1);
+  }finally{a.close();}
+ });
+}
+test('sensitive writes require explicit confirmation and remain blocked on invalid passwords',async()=>{
+ const a=await setup({ui:true,connected:true});try{
+  await a.scan();choose(a);await readBanks(a,{TID:'E280123456789012',RESERVED:'0000000000000000'});
+  for(const name of ['TID','RESERVED']){
+   bank(a,name);input(a,'AB');assert.equal(a.doc.getElementById('write').disabled,true);
+   const confirm=a.doc.getElementById('confirmSensitive');confirm.checked=true;confirm.dispatchEvent(new a.w.Event('change'));
+   assert.equal(a.doc.getElementById('write').disabled,false);
+   const password=a.doc.getElementById('accessPassword');password.value='XYZ';password.dispatchEvent(new a.w.Event('input'));assert.equal(a.doc.getElementById('write').disabled,true);
+   password.value='';password.dispatchEvent(new a.w.Event('input'));confirm.checked=false;confirm.dispatchEvent(new a.w.Event('change'));
+  }
  }finally{a.close();}
 });

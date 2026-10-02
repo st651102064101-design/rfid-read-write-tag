@@ -53,4 +53,24 @@ public class WritePolicyTest {
         assertThrows(IllegalArgumentException.class, () -> WritePolicy.powerIndex(actualTable, 30));
         assertThrows(IllegalArgumentException.class, () -> WritePolicy.powerIndex(actualTable, 2.97));
     }
+
+    @Test public void everyBankRequiresExactVerifiedWords() {
+        for (String bank : new String[]{"USER", "EPC", "TID", "RESERVED"}) {
+            int offset=bank.equals("EPC")?4:0;
+            WritePolicy.validate(EPC,bank,offset,3,"414243","",true);
+            String words=WritePolicy.wordData("414243","313233AB");
+            assertEquals("414243AB",words);
+            WritePolicy.verifyReadBack(words,"414243ab");
+            assertThrows(IllegalStateException.class,()->WritePolicy.verifyReadBack(words,"41424300"));
+            assertThrows(IllegalStateException.class,()->WritePolicy.verifyReadBack(words,"4142"));
+        }
+    }
+    @Test public void reservedReadBackUsesTheNewAccessPasswordNotKillPassword() {
+        assertEquals(0xFFFFFFFFL,WritePolicy.reservedVerifyPassword("11223344FFFFFFFF"));
+        assertEquals(0,WritePolicy.reservedVerifyPassword("FFFFFFFF00000000"));
+        assertThrows(IllegalArgumentException.class,()->WritePolicy.reservedVerifyPassword("1234"));
+    }
+    @Test public void nonEpcWritesNeverChangeTheTargetIdentifier() {
+        for(String bank:new String[]{"USER","TID","RESERVED"})assertEquals(EPC,WritePolicy.newEpc(EPC,bank,0,"4142"));
+    }
 }

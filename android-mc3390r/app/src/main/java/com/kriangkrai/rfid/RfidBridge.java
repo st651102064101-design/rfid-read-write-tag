@@ -420,7 +420,7 @@ public final class RfidBridge {
                 String reserved = read(epc, bank, 0, 4, password);
                 reserved = reserved.substring(0, offset * 2) + wordData
                         + reserved.substring((offset + words * 2) * 2);
-                verifyPassword = Long.parseLong(reserved.substring(8, 16), 16);
+                verifyPassword = WritePolicy.reservedVerifyPassword(reserved);
             }
             TagAccess.WriteAccessParams params = rd.Actions.TagAccess.new WriteAccessParams();
             params.setMemoryBank(memoryBank(bank));
@@ -431,12 +431,12 @@ public final class RfidBridge {
             params.setAccessPassword(password);
             TagData written = new TagData();
             issued = true;
-            rd.Actions.TagAccess.writeWait(epc, params, antenna, written);
+            rd.Actions.TagAccess.writeWait(epc, params, null, written, true, bank.equals("EPC"));
             if (written.getOpStatus() != null && written.getOpStatus() != ACCESS_OPERATION_STATUS.ACCESS_SUCCESS)
                 throw new IllegalStateException("Write returned " + written.getOpStatus() + "; check the tag before retrying");
             String newEpc = WritePolicy.newEpc(epc, bank, offset, data);
             String after = read(newEpc, bank, offset / 2, words, verifyPassword);
-            if (!after.equals(wordData)) throw new IllegalStateException("Read-back did not match the complete written word range; check the tag before retrying");
+            WritePolicy.verifyReadBack(wordData, after);
             result = success().put("epc", epc).put("newEpc", newEpc).put("memoryBank", bank)
                     .put("offsetBytes", offset).put("beforeHex", before).put("afterHex", after)
                     .put("message", "Written and read back from MC3390R" + (length % 2 == 1 ? " · adjacent byte preserved" : ""));

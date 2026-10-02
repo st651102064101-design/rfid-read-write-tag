@@ -6,7 +6,7 @@ if(!zebraDir || !file(zebraDir).exists())throw new GradleException('Set ZEBRA_RF
 android {
  namespace 'com.kriangkrai.rfid'
  compileSdk 35
- defaultConfig { applicationId 'com.kriangkrai.rfid.mc3390r'; minSdk 27; targetSdk 28; versionCode 9; versionName '1.0.8' }
+ defaultConfig { applicationId 'com.kriangkrai.rfid.mc3390r'; minSdk 27; targetSdk 28; versionCode 10; versionName '1.0.9' }
  compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
  buildTypes { release { minifyEnabled false } }
  testOptions { unitTests.returnDefaultValues = true }

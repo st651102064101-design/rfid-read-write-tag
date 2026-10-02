@@ -63,6 +63,17 @@ public final class WritePolicy {
                 + oldEpc.substring(first + data.length());
     }
 
+    public static void verifyReadBack(String expected, String actual) {
+        if (!hex(expected, false).equals(hex(actual, false)))
+            throw new IllegalStateException("Read-back did not match the complete written word range; check the tag before retrying");
+    }
+
+    public static long reservedVerifyPassword(String reserved) {
+        String data = hex(reserved, false);
+        if (data.length() != 16) throw new IllegalArgumentException("Read the complete RESERVED bank before changing passwords");
+        return Long.parseLong(data.substring(8, 16), 16);
+    }
+
     public static long password(String password) {
         return password.isEmpty() ? 0L : Long.parseLong(password, 16);
     }
