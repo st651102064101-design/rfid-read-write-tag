@@ -80,7 +80,7 @@ test('mobile UI has one selection point and bank writes stay blocked until memor
   await a.scan([{epc,rssi:-40},{epc:secondEpc,rssi:-50}]);choose(a);assert.equal(a.doc.getElementById('epc').value,epc);assert.equal(a.doc.getElementById('epc').hidden,true);assert.equal(a.doc.querySelector('label[for=epc]'),null);
   assert.equal(a.doc.querySelector('.panel.editor').hidden,false);bank(a,'USER');input(a,'A');assert.equal(a.doc.getElementById('write').disabled,true);assert.match(a.doc.getElementById('error').textContent,/Unknown size for USER/);
   await readBanks(a,{USER:'00'.repeat(8)});input(a,'ABC');assert.equal(a.doc.getElementById('write').disabled,false);assert.match(a.doc.getElementById('count').textContent,/3 \/ 8 bytes/);
-  assert.equal(a.doc.querySelector('#epc').value,epc);assert.equal(a.errors.length,0);
+  assert.equal(a.doc.querySelector('#epc').value,epc);assert.equal(a.errors.length,0, a.errors.map(e=>e.message).join("; "));
  }finally{a.close();}
 });
 
@@ -122,11 +122,17 @@ test('power drag submits once on release and only becomes confirmed after native
  }finally{a.close();}
 });
 
-test('reading switch changes confirmed state only after SDK result and stays disabled offline',async()=>{
+test('MC3390R uses native trigger state without a reading switch',async()=>{
  const a=await setup({ui:true,connected:true,reading:true});try{
-  const button=a.doc.getElementById('readingToggle');assert.equal(button.getAttribute('aria-checked'),'true');const pending=button.onclick();await flush();assert.equal(a.last('reading').body.enabled,false);assert.equal(button.disabled,true);assert.equal(button.getAttribute('aria-checked'),'true');
-  a.w.NativeRfid.state({reading:false});a.reply('reading',{status:'success',verified:true,reading:false});await a.delay(500);await pending;assert.equal(button.getAttribute('aria-checked'),'false');assert.match(button.textContent,/Tag reading off/);
-  a.w.NativeRfid.state({connected:false,message:'Reader disconnected'});await flush();assert.equal(button.disabled,true);assert.equal(a.doc.getElementById('readerPower').disabled,true);assert.equal(a.doc.getElementById('write').disabled,true);assert.match(a.doc.getElementById('readerStatus').textContent,/Offline/);
+  assert.equal(a.doc.getElementById('readingToggle'),null);
+  assert.equal(a.doc.querySelector('.readingControl'),null);
+  assert.equal(a.commands.filter(c=>c.operation==='reading').length,0);
+  a.w.NativeRfid.state({reading:false});await flush();
+  assert.equal(a.w.NativeRfid.currentState.reading,false);
+  a.w.NativeRfid.state({connected:false,message:'Reader disconnected'});await flush();
+  assert.equal(a.doc.getElementById('readerPower').disabled,true);
+  assert.equal(a.doc.getElementById('write').disabled,true);
+  assert.match(a.doc.getElementById('readerStatus').textContent,/Offline/);
  }finally{a.close();}
 });
 
@@ -251,3 +257,4 @@ test('EPC format conversion keeps HEX for embedded nonprintable data and does no
   await readBanks(a,{USER:'00'.repeat(8)});bank(a,'USER');input(a,'004142');text.checked=true;text.dispatchEvent(new a.w.Event('change'));assert.equal(hex.checked,true);assert.equal(a.doc.getElementById('data').value,'004142');assert.match(a.doc.getElementById('error').textContent,/non-printable/);
  }finally{a.close();}
 });
+

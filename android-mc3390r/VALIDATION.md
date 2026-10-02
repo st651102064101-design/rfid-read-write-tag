@@ -44,3 +44,7 @@ The designated tag has no readable USER memory. A 256-byte USER write, other chi
 Installed versionCode 2 over Wi-Fi on 2026-10-02. Actual SDK inventory and handheld-trigger events were observed with live tag data. Debug logs confirmed successful native ToneGenerator starts spaced approximately 300 ms apart; Android AudioFlinger showed this app's STREAM_MUSIC AudioTrack rendering frames to the speaker output. The device's existing volume/mute values were not changed. This confirms the native playback path; subjective audibility is being checked with the user.
 
 Five unit tests cover valid complete-byte EPCs, empty/invalid batches, the 300 ms boundary, inactive/lifecycle suppression, monotonic clock validation and no accumulated sounds after long gaps. Queued sound callbacks are invalidated on inventory stop, memory access, disconnect, backgrounding and disposal. Audio runs on the main thread; the SDK callback never waits for sound playback. No physical tag write was performed for this audio update.
+
+## Version 1.0.3 — physical trigger controls
+Removed the Tag reading switch and its polling from the MC3390R UI. All 23 mobile tests pass; APK build succeeds. Installed over Wi-Fi on the MC3390R: SDK connected, switch absent, antenna power remains 6.8 dBm, and no horizontal overflow. Native trigger handling, scan sound and portrait lock are unchanged.
+
