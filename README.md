@@ -19,3 +19,5 @@ Tests: node --test scripts/test-ui.mjs scripts/test-writer.mjs
 Migration generation: node node_modules/drizzle-kit/bin.cjs generate
 
 Reader recovery: run pwsh -File reader/reconnect-reader.ps1 to reload a disconnected HTTP POST gateway without changing its endpoint or radio settings. The command verifies fresh EPC events on the Site; heartbeat alone is not treated as successful tag delivery. Local reader address was updated after its DHCP address changed.
+
+Reader data relay: if the reader cannot resolve the Site hostname through Windows Internet Sharing, run `pwsh -File reader/start-data-relay.ps1`. It forwards JSON batches from the configured reader to the Site over HTTPS. The relay listens on `192.168.137.1:8766`, accepts only the configured reader IP, limits requests to 1 MB, and returns the Site response status. Local reader credentials remain DPAPI-encrypted. The notebook must stay powered on and connected. Current fallback network: Ethernet `192.168.137.1/24`, FX9600 static `192.168.137.10/24`, gateway `192.168.137.1`, DNS `8.8.8.8`. The relay changes only the Tag Data URL; management and radio configuration are preserved.
