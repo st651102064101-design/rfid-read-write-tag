@@ -31,3 +31,5 @@
 
 /* Stack the writing workspace in reading order on every screen. */
 .workspace{display:flex;flex-direction:column;gap:20px}.workspace>.editor{position:static;width:100%;box-sizing:border-box;align-self:stretch}.workspace>aside{display:flex;flex-direction:column;gap:20px;width:100%}.workspace>aside>.panel{width:100%;box-sizing:border-box;margin:0}.workspace .selectionPanel{order:0}.selectionPanel button{width:auto;padding:10px 16px;border:1px solid #3b6895;border-radius:8px;background:#173957;color:#e2f2ff;cursor:pointer}
+
+.readingToggle{display:flex;align-items:center;gap:8px;margin-left:auto;white-space:nowrap}.readingToggle::before{content:"";width:30px;height:18px;border-radius:20px;background:#536174;box-shadow:inset -12px 0 0 3px #c5d0df}.readingToggle[aria-checked="true"]::before{background:#087cff;box-shadow:inset 12px 0 0 3px #e6f3ff}.readingToggle:disabled{opacity:.5;cursor:wait}.feed .panelhead{flex-wrap:wrap}

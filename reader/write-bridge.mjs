@@ -1,3 +1,4 @@
+import {setReading} from './reading-control.mjs';
 import http from 'node:http';
 import https from 'node:https';
 import {createInterface} from 'node:readline';
@@ -28,6 +29,7 @@ async function write(b){
  validate(b);const login=await request('/cloud/localRestLogin','GET',null,'Basic '+Buffer.from(config.username+':'+config.password).toString('base64'));
  if(login.code!==0||!login.message)throw Error('Reader login failed');const auth='Bearer '+login.message;
  const original=await request('/cloud/mode','GET',null,auth),status=await request('/cloud/status','GET',null,auth);
+ if(status.radioActivity!=='active')throw Error('Start tag reading before writing');
  const epc=b.epc.toUpperCase(),fresh=await events();
  const records=fresh.flatMap(event=>readerRecords(event.payload));const tag=records.find(record=>recordEpc(record)===epc);
  const d=tag?.data||tag||{},tid=d.TID||(tag?.type==='CUSTOM'&&d.MAC==='C4:7D:CC:74:AF:20'&&d.accessResults?.length===4?d.accessResults[1]:null);
@@ -79,13 +81,16 @@ const server=http.createServer(async(req,res)=>{
  try{const result=await write(b);completed.set(b.requestId,result);send(200,result);}catch(error){const result={requestId:b.requestId,epc:b.epc,status:'unknown',verified:false,message:String(error?.message||'Bridge could not confirm the operation. Check tag and reader before retrying.').slice(0,240)};completed.set(b.requestId,result);send(200,result);}finally{busy=false;}
 });server.listen(5051,'127.0.0.1',()=>console.log('FX9600 writer bridge listening on localhost:5051'));
 // Outbound polling: no public tunnel or inbound network port is required.
-let pendingResult=null;
+let pendingResult=null,readerState=null,polling=false;
+async function loginReader(){const login=await request('/cloud/localRestLogin','GET',null,'Basic '+Buffer.from(config.username+':'+config.password).toString('base64'));if(login.code!==0||!login.message)throw Error('Reader login failed');return 'Bearer '+login.message;}
+async function executeCommand(b){if(b.operation!=='reading')return write(b);if(typeof b.enabled!=='boolean')throw Error('Invalid reading command');const result=await setReading(b.enabled,request,await loginReader());return {requestId:b.requestId,status:'success',...result};}
 async function poll(){
- if(busy)return;
+ if(busy||polling)return;polling=true;
  try{
-  const response=await fetch(site+'/api/bridge/poll',{method:'POST',headers:{Authorization:'Bearer '+config.token,'Content-Type':'application/json'},body:JSON.stringify({result:pendingResult}),signal:AbortSignal.timeout(8000)});
+  try{const state=await request('/cloud/status','GET',null,await loginReader());readerState=['active','inactive'].includes(state.radioActivity)?{reading:state.radioActivity==='active',at:new Date().toISOString()}:null;}catch{readerState=null;}
+  const response=await fetch(site+'/api/bridge/poll',{method:'POST',headers:{Authorization:'Bearer '+config.token,'Content-Type':'application/json'},body:JSON.stringify({result:pendingResult,readerState}),signal:AbortSignal.timeout(8000)});
   if(!response.ok)return;const data=await response.json();pendingResult=null;
-  if(data.command){const b=data.command;busy=true;try{pendingResult=completed.get(b.requestId)||await write(b);completed.set(b.requestId,pendingResult);}catch(error){pendingResult={requestId:b.requestId,epc:b.epc,status:'unknown',verified:false,message:String(error?.message||'Hardware result not confirmed. Check tag before retrying.').slice(0,240)};completed.set(b.requestId,pendingResult);}finally{busy=false;}}
- }catch{/* Keep pending result and retry delivering it; never repeat the write. */}
+  if(data.command){const b=data.command;busy=true;try{pendingResult=completed.get(b.requestId)||await executeCommand(b);completed.set(b.requestId,pendingResult);}catch(error){pendingResult={requestId:b.requestId,epc:b.epc,status:'unknown',verified:false,message:String(error?.message||'Hardware result not confirmed. Check tag before retrying.').slice(0,240)};completed.set(b.requestId,pendingResult);}finally{busy=false;}}
+ }catch{/* Keep pending result and retry delivering it; never repeat the write. */}finally{polling=false;}
 }
 setInterval(poll,1000);poll();

@@ -22,6 +22,13 @@
       "when": 1790834266873,
       "tag": "0002_fearless_johnny_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790911683492,
+      "tag": "0003_colossal_sharon_carter",
+      "breakpoints": true
     }
   ]
 }

@@ -39,6 +39,16 @@ async function readBody(request){
 export default {async fetch(request,env){
  const url=new URL(request.url);
  try{
+  if(url.pathname==='/api/reader/control'&&request.method==='GET'){
+   const {results}=await database(env).prepare('SELECT reading,reader_seen,last_seen FROM writer_bridge WHERE id=1').all();const row=results[0],available=!!row&&typeof row.reading==='number'&&Date.now()-Date.parse(row.reader_seen)<10000&&Date.now()-Date.parse(row.last_seen)<10000;return json({ok:true,available,reading:available?row.reading===1:null});
+  }
+  if(url.pathname==='/api/reader/control'&&request.method==='POST'){
+   if(!env.WRITE_BRIDGE_TOKEN)return json({error:'Reader bridge unavailable'},503);const body=await readBody(request);
+   if(!body||typeof body.enabled!=='boolean'||!/^[a-z0-9-]{8,80}$/i.test(body.requestId||''))return json({error:'Invalid reading command'},422);
+   const db=database(env),{results}=await db.prepare('SELECT reader_seen,last_seen FROM writer_bridge WHERE id=1').all();const row=results[0];if(!row||Date.now()-Date.parse(row.reader_seen)>=10000||Date.now()-Date.parse(row.last_seen)>=10000)return json({error:'Reader is unavailable'},503);
+   const command={requestId:body.requestId,operation:'reading',enabled:body.enabled},payload=JSON.stringify(command);const {results:existing}=await db.prepare('SELECT payload FROM writer_commands WHERE request_id=?').bind(body.requestId).all();if(existing[0]&&existing[0].payload!==payload)return json({error:'Request ID already used'},409);
+   await db.prepare("INSERT INTO writer_commands (request_id,created_at,status,payload) VALUES (?,?,'queued',?) ON CONFLICT(request_id) DO NOTHING").bind(body.requestId,new Date().toISOString(),payload).run();return json({requestId:body.requestId,status:'queued'},202);
+  }
   if(url.pathname==='/api/write/config'&&request.method==='GET'){
    if(!env.WRITE_BRIDGE_TOKEN)return json({ok:true,available:false});
    const {results}=await database(env).prepare('SELECT last_seen FROM writer_bridge WHERE id=1').all();return json({ok:true,available:!!results[0]&&Date.now()-Date.parse(results[0].last_seen)<60000});
@@ -47,6 +57,7 @@ export default {async fetch(request,env){
    if(!env.WRITE_BRIDGE_TOKEN||request.headers.get('authorization')!=='Bearer '+env.WRITE_BRIDGE_TOKEN)return json({error:'Unauthorized'},401);
    const body=await readBody(request),db=database(env),now=new Date().toISOString();
    await db.prepare('INSERT INTO writer_bridge (id,last_seen) VALUES (1,?) ON CONFLICT(id) DO UPDATE SET last_seen=excluded.last_seen').bind(now).run();
+   if(body.readerState&&typeof body.readerState.reading==='boolean'&&Number.isFinite(Date.parse(body.readerState.at)))await db.prepare('UPDATE writer_bridge SET reading=?,reader_seen=? WHERE id=1').bind(body.readerState.reading?1:0,body.readerState.at).run();
    if(body.result&&['success','failed','unknown'].includes(body.result.status))await db.prepare("UPDATE writer_commands SET status=?,result=? WHERE request_id=? AND status='running'").bind(body.result.status,JSON.stringify(body.result),body.result.requestId).run();
    const {results}=await db.prepare("UPDATE writer_commands SET status='running' WHERE request_id=(SELECT request_id FROM writer_commands WHERE status='queued' AND created_at>? ORDER BY created_at LIMIT 1) AND status='queued' RETURNING payload").bind(new Date(Date.now()-30000).toISOString()).all();
    return json({ok:true,command:results[0]?JSON.parse(results[0].payload):null});

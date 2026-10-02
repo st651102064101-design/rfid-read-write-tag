@@ -21,4 +21,6 @@ export const writerCommands = sqliteTable('writer_commands', {
 export const writerBridge = sqliteTable('writer_bridge', {
  id: integer('id').primaryKey(),
  lastSeen: text('last_seen').notNull(),
+ reading: integer('reading'),
+ readerSeen: text('reader_seen'),
 });
