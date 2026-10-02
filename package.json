@@ -5,7 +5,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "validate": "node scripts/validate-artifact.mjs",
-    "test": "node scripts/build.mjs && node --test scripts/test-ui.mjs scripts/test-writer.mjs scripts/test-reading.mjs"
+    "test": "node scripts/build.mjs && node --test scripts/test-ui.mjs scripts/test-writer.mjs scripts/test-reading.mjs scripts/test-relay.mjs"
   },
   "devDependencies": {
     "drizzle-kit": "^0.31.11",

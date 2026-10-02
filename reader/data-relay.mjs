@@ -1,3 +1,5 @@
+import {setReading} from './reading-control.mjs';
+import {decodeReaderPayload} from './relay-payload.mjs';
 import https from 'node:https';
 import http from 'node:http';
 import {createInterface} from 'node:readline';
@@ -16,11 +18,12 @@ const server=http.createServer(async(req,res)=>{
  if(req.method!=='POST'||req.url!=='/rfid/events'){res.writeHead(404);return res.end()}
  try{
   const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>1048576){res.writeHead(413);res.end();req.destroy();return}chunks.push(chunk)}
-  const body=Buffer.concat(chunks);JSON.parse(body.toString());
+  const decoded=decodeReaderPayload(Buffer.concat(chunks)),body=JSON.stringify(decoded.payload);
+  if(decoded.repaired&&delivered===0)console.log('Normalized missing accessResults brackets:',decoded.repaired);
   const response=await fetch(new URL('/rfid/events',site),{method:'POST',headers:{'Content-Type':'application/json'},body,signal:AbortSignal.timeout(15000)});
   const text=await response.text();res.writeHead(response.status,{'Content-Type':'application/json'});res.end(text);
   if(response.ok){delivered++;if(delivered===1||delivered%20===0)console.log(JSON.stringify({relay:'connected',batches:delivered,at:new Date().toISOString()}))}
- }catch(error){if(!res.headersSent)res.writeHead(502);res.end();console.error('Relay failed:',error.message)}
+ }catch(error){if(!res.headersSent)res.writeHead(error instanceof SyntaxError?400:502);res.end();console.error('Relay failed:',error.message)}
 });
 await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,host,resolve)});
 console.log('Reader relay listening on '+host+':'+port);
@@ -28,9 +31,10 @@ async function configure(){
  const login=await request('/cloud/localRestLogin','GET',null,'Basic '+Buffer.from(config.username+':'+config.password).toString('base64'));
  if(login.code!==0||!login.message)throw Error('Reader login failed');const auth='Bearer '+login.message;
  const settings=await request('/cloud/config','GET',null,auth),gateway=settings['READER-GATEWAY'];
- const connection=gateway?.endpointConfig?.data?.event?.connections?.[0];if(!connection?.options)throw Error('Tag Data endpoint missing');
- const url='http://'+host+':'+port+'/rfid/events';
- if(connection.options.URL!==url){connection.options.URL=url;await request('/cloud/config','PUT',{'READER-GATEWAY':gateway},auth)}
- console.log('Reader Tag Data endpoint configured');
+ const url='http://'+host+':'+port+'/rfid/events';let changed=false;
+ for(const name of ['data','management']){const connections=gateway?.endpointConfig?.[name]?.event?.connections;if(!connections?.length)throw Error(name+' event endpoint missing');for(const connection of connections){if(!connection.options)throw Error('Event options missing');if(connection.options.URL!==url){connection.options.URL=url;changed=true;}}}
+ if(changed){const before=await request('/cloud/status','GET',null,auth);if(!['active','inactive'].includes(before.radioActivity))throw Error('Reader radio state unavailable');try{await request('/cloud/config','PUT',{'READER-GATEWAY':gateway},auth);}finally{if(before.radioActivity==='inactive')await setReading(false,request,auth);}}
+ const actual=(await request('/cloud/config','GET',null,auth))['READER-GATEWAY'];for(const name of ['data','management']){if(actual.endpointConfig[name].event.connections.some(connection=>connection.options.URL!==url))throw Error(name+' endpoint was not applied; configure its URL in the reader console');}
+ console.log('Reader Tag Data and Management Events endpoints verified');
 }
 while(true){try{await configure();break}catch(error){console.error('Waiting for reader:',error.message);await new Promise(r=>setTimeout(r,10000))}}
