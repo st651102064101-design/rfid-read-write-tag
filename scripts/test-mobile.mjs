@@ -258,3 +258,28 @@ test('EPC format conversion keeps HEX for embedded nonprintable data and does no
  }finally{a.close();}
 });
 
+
+test('partial bank reads expose TID and other actual data and retry missing banks',async()=>{
+ const a=await setup({ui:true,connected:true});try{
+  await a.scan();choose(a);await a.tick(1500);
+  a.reply('banks',{status:'success',banks:{EPC:'3000'+epc,TID:'E2801191A5030069565F9436',RESERVED:'0000000000000000'},readableErrors:{USER:'Reader error: Operation In Progress'}});
+  await flush();await a.w.pollLive();
+  const text=a.doc.getElementById('tagInfoDialog').textContent;
+  assert.match(text,/E2801191A5030069565F9436/);assert.match(text,/0000000000000000/);assert.match(text,/Operation In Progress/);
+  const previous=a.commands.filter(c=>c.operation==='banks').length;
+  await a.tick(1500);assert.equal(a.commands.filter(c=>c.operation==='banks').length,previous);
+  const now=a.w.Date.now();a.w.Date.now=()=>now+11000;await a.tick(1500);assert.equal(a.commands.filter(c=>c.operation==='banks').length,previous+1);
+ }finally{a.close();}
+});
+
+test('inventory preserves SDK signal metadata and Details reads banks without changing selection',async()=>{
+ const a=await setup({ui:true,connected:true});try{
+  await a.scan([{epc,rssi:-42,antenna:2,pc:12288,crc:123,seenCount:7},{epc:secondEpc,rssi:-50}]);
+  const data=await(await a.w.fetch('/api/events')).json();assert.equal(data.events[0].payload[0].data.antenna,2);assert.equal(data.events[0].payload[0].data.PC,12288);assert.equal(data.events[0].payload[0].data.CRC,123);
+  const selected=a.doc.getElementById('epc').value;
+  a.doc.querySelector('.eventcard[data-epc="'+secondEpc+'"]').parentElement.querySelector('.tagDetailButton').click();await flush();
+  assert.equal(a.last('banks').body.epc,secondEpc);assert.equal(a.doc.getElementById('epc').value,selected);
+  a.reply('banks',{status:'success',banks:{TID:'E28012345678',RESERVED:'0000000000000000'}});await flush();
+  assert.match(a.doc.getElementById('tagDrawerContent').textContent,/E28012345678/);
+ }finally{a.close();}
+});

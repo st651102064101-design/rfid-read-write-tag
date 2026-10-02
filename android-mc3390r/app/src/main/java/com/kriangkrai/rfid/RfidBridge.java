@@ -289,7 +289,7 @@ public final class RfidBridge {
         int low = 1, high = ceilingWords;
         String observed = null;
         while (low <= high) {
-            int count = observed == null && high == ceilingWords ? high : (low + high) / 2;
+            int count = observed == null ? 1 : (low + high) / 2;
             try {
                 String data = read(epc, bank, 0, count, password);
                 observed = data;
@@ -317,6 +317,17 @@ public final class RfidBridge {
     }
 
     private String read(String epc, String bank, int offsetWords, int countWords, long password) throws Exception {
+        return MemoryReadSession.run(
+                () -> readOnce(epc, bank, offsetWords, countWords, password),
+                () -> { try { requireReader().Actions.TagAccess.stopAccess(); }
+                    catch (Exception error) { Log.d("MC3390R.Rfid", "Access cleanup: " + explain(error)); } },
+                error -> error instanceof OperationFailureException
+                    && (((OperationFailureException) error).getResults() == RFIDResults.RFID_OPERATION_IN_PROGRESS
+                        ),
+                () -> Thread.sleep(150));
+    }
+
+    private String readOnce(String epc, String bank, int offsetWords, int countWords, long password) throws Exception {
         RFIDReader rd = requireReader();
         TagAccess.ReadAccessParams params = rd.Actions.TagAccess.new ReadAccessParams();
         params.setMemoryBank(memoryBank(bank));
@@ -466,7 +477,7 @@ public final class RfidBridge {
             beepPending.set(false);
             if (!beepGate.shouldPlay(SystemClock.elapsedRealtime(), scanBeepEligible() && epoch == beepEpoch.get(), true)) return;
             try {
-                if (scanTone == null) scanTone = new ToneGenerator(AudioManager.STREAM_MUSIC, 80);
+                if (scanTone == null) scanTone = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
                 scanTone.stopTone();
                 boolean accepted = scanTone.startTone(ToneGenerator.TONE_PROP_BEEP, 20);
                 if (accepted && debugBuild) Log.d("MC3390R.Rfid", "Scan beep accepted at " + SystemClock.elapsedRealtime() + " ms");
@@ -529,7 +540,9 @@ public final class RfidBridge {
                 for (TagData tag : tags) {
                     String epc = tag.getTagID();
                     if (ScanBeepGate.isCompleteEpc(epc))
-                        batch.put(new JSONObject().put("epc", epc.toUpperCase(Locale.ROOT)).put("rssi", tag.getPeakRSSI()));
+                        batch.put(new JSONObject().put("epc", epc.toUpperCase(Locale.ROOT)).put("rssi", tag.getPeakRSSI()).put("antenna", tag.getAntennaID())
+                                .put("pc", tag.getPC()).put("crc", tag.getCRC())
+                                .put("seenCount", tag.getTagSeenCount()));
                 }
                 if (batch.length() > 0) queueScanBeep();
                 evaluate("window.NativeRfid && window.NativeRfid.tags(" + batch + ")");

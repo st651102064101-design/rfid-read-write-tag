@@ -41,3 +41,5 @@ Physical power off/on, factory reset, tag kill, and permanent lock operations ar
 Run the Java unit tests and APK build above. `node --test scripts/test-mobile.mjs` from the repository root tests the offline interface/SDK transport contract. These tests do not establish physical RFID performance. Hardware connection, scanning, trigger events, power read-back and tag writes need a real device and a designated test tag. Record completed hardware checks separately in `VALIDATION.md`.
 
 The supplied project includes a known Android <=9 compatibility fix that sets the SDK's internal `API3Utils.m_scontext` before SERVICE_SERIAL enumeration. The bridge documents this vendor SDK workaround; it is not a simulated reader or substitute SDK.
+
+The scan tone uses 100% application gain and follows the device Media volume without changing system volume. A dedicated DataWedge profile disables barcode input only for this app. Bank reads stop their access session and allow firmware to settle before subsequent reads.

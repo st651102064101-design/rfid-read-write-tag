@@ -52,3 +52,11 @@ Removed the Tag reading switch and its polling from the MC3390R UI. All 23 mobil
 ## Version 1.0.4 — scan cadence
 Removed the 300 ms beep rate limit. Each delivered valid inventory batch requests a 20 ms tone; pending callbacks coalesce and stale/background/access events remain suppressed. Java unit tests pass (12 total), including 101 events spaced 30 ms apart and faster consecutive events. APK built and installed successfully over Wi-Fi. Actual acoustic 30 ms cadence is not yet measured on hardware.
 
+
+## Version 1.0.5 — complete bank reads
+Hardware reproduced access sessions stuck with Operation In Progress. Read sessions now call SDK stopAccess after each attempt and retry busy reads up to three times; writes are never retried. On actual BOX-003, EPC C06630000000000000424F582D303033, TID E280119120006D28D1770346000000000000 and RESERVED 0000000000000000 were returned. USER reported no readable memory. Details requests memory directly and refreshes the open drawer. Inventory retains SDK antenna/PC/CRC/seenCount. 25 mobile tests and 15 Java tests pass; APK build succeeds.
+
+
+## Version 1.0.6 — sound gain and RFID-only input
+ToneGenerator gain is now 100% of Media stream volume; no system volume is changed. Dedicated MC3390R_RFID_ONLY DataWedge profile disables barcode input for this package. Device returned RFID_ONLY_PROFILE SUCCESS. Unit tests pass (15 Java, 25 mobile), APK built and installed. Subjective loudness needs user confirmation. Subsequent bank reads returned access failures for the old targets; further hardware verification is pending a fresh scan. Earlier BOX-003 TID/RESERVED success does not establish reliable reads for all tags.
+
