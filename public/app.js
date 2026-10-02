@@ -143,12 +143,12 @@ async function pollReaderStatus(){
   const response=await fetch('/api/reader/status',{cache:'no-store',signal:AbortSignal.timeout(8000)}),data=await response.json();
   if(!response.ok||!data.ok)throw Error(data.error||'Unable to read heartbeat status');
   const latest=data.readers?.[0];
-  if(!latest){setReaderStatus('unknown','No heartbeat received. Check Management Events Interface.');return;}
+  if(!latest){setReaderStatus('unknown','Offline');return;}
   const at=Date.parse(latest.receivedAt),age=Math.max(0,Date.now()-at),previous=Date.parse(latest.previousAt||'');
   const timeout=Number.isFinite(previous)?Math.max(5000,Math.min(60000,(at-previous)*3)):180000;
   const online=Number.isFinite(at)&&age<=timeout;
-  setReaderStatus(online?'online':'offline',(online?'Online':'Offline')+' · '+latest.readerKey+' · Heartbeat '+elapsedLabel(age));
- }catch(e){setReaderStatus('unknown','Status unavailable. Retrying.');}
+  setReaderStatus(online?'online':'offline',online?'Online':'Offline');
+ }catch(e){setReaderStatus('unknown','Offline');}
  finally{statusBusy=false;}
 }
 $('latestEvents').textContent='Latest data';
@@ -231,4 +231,5 @@ const editorPanel=document.querySelector('.editor');function updateEditorSticky(
 const infoDialog=$('tagInfoDialog');$('openTagInfo').onclick=()=>{if(infoDialog.showModal)infoDialog.showModal();else infoDialog.setAttribute('open','');};$('closeTagInfo').onclick=()=>{if(infoDialog.close)infoDialog.close();else infoDialog.removeAttribute('open');$('openTagInfo').focus();};infoDialog.addEventListener('click',e=>{if(e.target===infoDialog){const r=infoDialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)$('closeTagInfo').click();}});$('memoryBank').addEventListener('change',()=>{const sensitive=['TID','RESERVED'].includes($('memoryBank').value);document.querySelector('.sensitiveConfirm').hidden=!sensitive;if(sensitive)$('advancedOptions').open=true;});document.querySelector('.sensitiveConfirm').hidden=true;
 
 let drawerTrigger=null;function openTagDrawer(card,trigger){const drawer=$('tagDrawer'),content=$('tagDrawerContent');if(drawerTrigger)drawerTrigger.setAttribute('aria-expanded','false');drawerTrigger=trigger;content.replaceChildren(...[...card.children].filter(child=>child.tagName!=='SUMMARY').map(child=>child.cloneNode(true)));$('tagDrawerTitle').textContent='Tag details';trigger.setAttribute('aria-expanded','true');if(!drawer.open){if(drawer.showModal)drawer.showModal();else drawer.setAttribute('open','');}}function finishTagDrawer(){if(!drawerTrigger)return;drawerTrigger?.setAttribute('aria-expanded','false');if(drawerTrigger?.isConnected)drawerTrigger.focus();else $('eventList').focus();drawerTrigger=null;}function closeTagDrawer(){const drawer=$('tagDrawer');if(drawer.close)drawer.close();else drawer.removeAttribute('open');finishTagDrawer();}$('closeTagDrawer').onclick=closeTagDrawer;$('tagDrawer').addEventListener('close',finishTagDrawer);$('tagDrawer').addEventListener('cancel',()=>{setTimeout(finishTagDrawer,0);});$('tagDrawer').addEventListener('click',event=>{if(event.target!==$('tagDrawer'))return;const r=$('tagDrawer').getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)closeTagDrawer();});
+
 
