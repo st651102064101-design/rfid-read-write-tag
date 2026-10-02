@@ -1,0 +1,1 @@
+ALTER TABLE `writer_bridge` ADD `power` text;

@@ -22,5 +22,6 @@ export const writerBridge = sqliteTable('writer_bridge', {
  id: integer('id').primaryKey(),
  lastSeen: text('last_seen').notNull(),
  reading: integer('reading'),
+ power: text('power'),
  readerSeen: text('reader_seen'),
 });

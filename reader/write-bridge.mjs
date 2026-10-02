@@ -1,4 +1,6 @@
 import {setReading} from './reading-control.mjs';
+import {readPowerState,setTransmitPower} from './power-control.mjs';
+import {setReading} from './reading-control.mjs';
 import http from 'node:http';
 import https from 'node:https';
 import {createInterface} from 'node:readline';
@@ -39,7 +41,7 @@ async function write(b){
  const firstWord=b.offsetBytes/2,wordCount=Math.ceil(b.lengthBytes/2),planBase={membank:b.memoryBank,wordPointer:firstWord,wordCount};
  let baseline=Math.max(0,...fresh.map(event=>Number(event.id))),changed=false;const at=Date.now();let result;
  try{
-  const makeMode=accesses=>({type:'CUSTOM',antennas:[Number(d.antenna)||1],transmitPower:[original.transmitPower?.[0]||15],query:{session:'S0',target:'A',sel:'NOT_SL'},selects:[{target:'S0',action:'INVA_INVB',...identity}],accesses,radioStopConditions:{antennaCycles:1}});
+  const makeMode=accesses=>({type:'CUSTOM',antennas:[Number(d.antenna)||1],transmitPower:[original.transmitPower?.[0]??15],query:{session:'S0',target:'A',sel:'NOT_SL'},selects:[{target:'S0',action:'INVA_INVB',...identity}],accesses,radioStopConditions:{antennaCycles:1}});
   const runPhase=async(accesses,minResults,timeoutMs,acceptedEpcs)=>{
    await request('/cloud/stop','PUT',null,auth);changed=true;await request('/cloud/mode','PUT',makeMode(accesses),auth);
    const activeMode=await request('/cloud/mode','GET',null,auth),matches=activeMode.type==='CUSTOM'&&accessSequenceMatches(activeMode.accesses,accesses);
@@ -83,11 +85,11 @@ const server=http.createServer(async(req,res)=>{
 // Outbound polling: no public tunnel or inbound network port is required.
 let pendingResult=null,readerState=null,polling=false;
 async function loginReader(){const login=await request('/cloud/localRestLogin','GET',null,'Basic '+Buffer.from(config.username+':'+config.password).toString('base64'));if(login.code!==0||!login.message)throw Error('Reader login failed');return 'Bearer '+login.message;}
-async function executeCommand(b){if(b.operation!=='reading')return write(b);if(typeof b.enabled!=='boolean')throw Error('Invalid reading command');const result=await setReading(b.enabled,request,await loginReader());return {requestId:b.requestId,status:'success',...result};}
+async function executeCommand(b){if(b.operation==='power')return {requestId:b.requestId,status:'success',...await setTransmitPower(b.powerDbm,request,await loginReader())};if(b.operation!=='reading')return write(b);if(typeof b.enabled!=='boolean')throw Error('Invalid reading command');const result=await setReading(b.enabled,request,await loginReader());return {requestId:b.requestId,status:'success',...result};}
 async function poll(){
  if(busy||polling)return;polling=true;
  try{
-  try{const state=await request('/cloud/status','GET',null,await loginReader());readerState=['active','inactive'].includes(state.radioActivity)?{reading:state.radioActivity==='active',at:new Date().toISOString()}:null;}catch{readerState=null;}
+  try{const auth=await loginReader(),state=await request('/cloud/status','GET',null,auth);let power=null;try{power=await readPowerState(request,auth);}catch{}readerState=['active','inactive'].includes(state.radioActivity)?{reading:state.radioActivity==='active',power,at:new Date().toISOString()}:null;}catch{readerState=null;}
   const response=await fetch(site+'/api/bridge/poll',{method:'POST',headers:{Authorization:'Bearer '+config.token,'Content-Type':'application/json'},body:JSON.stringify({result:pendingResult,readerState}),signal:AbortSignal.timeout(8000)});
   if(!response.ok)return;const data=await response.json();pendingResult=null;
   if(data.command){const b=data.command;busy=true;try{pendingResult=completed.get(b.requestId)||await executeCommand(b);completed.set(b.requestId,pendingResult);}catch(error){pendingResult={requestId:b.requestId,epc:b.epc,status:'unknown',verified:false,message:String(error?.message||'Hardware result not confirmed. Check tag before retrying.').slice(0,240)};completed.set(b.requestId,pendingResult);}finally{busy=false;}}
