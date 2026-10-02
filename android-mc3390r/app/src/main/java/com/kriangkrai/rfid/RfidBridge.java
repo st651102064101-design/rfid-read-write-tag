@@ -141,7 +141,13 @@ public final class RfidBridge {
         reader.Config.setStartTrigger(trigger.StartTrigger);
         reader.Config.setStopTrigger(trigger.StopTrigger);
         reader.Config.setTriggerMode(ENUM_TRIGGER_MODE.RFID_MODE, true);
-        reader.Config.setAccessOperationWaitTimeout(5000);
+        reader.Config.setAccessOperationWaitTimeout(1500);
+        TagStorageSettings storage = reader.Config.getTagStorageSettings();
+        storage.enableAccessReports(true);
+        storage.discardTagsOnInventoryStop(false);
+        storage.setMaxMemoryBankByteCount(512);
+        storage.setTagFields(TAG_FIELD.ALL_TAG_FIELDS);
+        reader.Config.setTagStorageSettings(storage);
         powerValues = reader.ReaderCapabilities.getTransmitPowerLevelValues();
         refreshPower();
         // Old MC3390R firmware has no GetPowerState command and emits no event for an
@@ -268,13 +274,16 @@ public final class RfidBridge {
         JSONObject values = new JSONObject(), errors = new JSONObject();
         try {
             if (resume) setReading(false);
+            try { readSequence(epc, password, values, errors); }
+            catch (Exception unavailable) { Log.i("MC3390R.Rfid", "Sequence fallback: " + explain(unavailable)); }
             for (String bank : new String[]{"EPC", "TID", "USER", "RESERVED"}) {
+                if (values.has(bank)) continue;
                 try {
                     String data;
                     if (bank.equals("EPC")) data = read(epc, bank, 0, epc.length() / 4 + 2, password);
                     else if (bank.equals("RESERVED")) data = read(epc, bank, 0, 4, password);
-                    else data = probeBank(epc, bank, bank.equals("USER") ? 128 : 32, password);
-                    values.put(bank, data);
+                    else data = read(epc, bank, 0, 0, password);
+                    values.put(bank, data); errors.remove(bank);
                 } catch (Exception error) { errors.put(bank, explain(error)); }
             }
         } finally {
@@ -284,26 +293,56 @@ public final class RfidBridge {
         return success().put("epc", epc).put("banks", values).put("readableErrors", errors);
     }
 
-    /** Binary search only after explicit memory-overrun; RF/password errors never imply capacity. */
-    private String probeBank(String epc, String bank, int ceilingWords, long password) throws Exception {
-        int low = 1, high = ceilingWords;
-        String observed = null;
-        while (low <= high) {
-            int count = observed == null ? 1 : (low + high) / 2;
-            try {
-                String data = read(epc, bank, 0, count, password);
-                observed = data;
-                low = count + 1;
-            } catch (OperationFailureException error) {
-                if (error.getResults() != RFIDResults.RFID_ACCESS_TAG_MEMORY_OVERRUN_ERROR) throw error;
-                high = count - 1;
-            } catch (BankReadException error) {
-                if (!error.memoryOverrun) throw error;
-                high = count - 1;
+    private void readSequence(String epc, long password, JSONObject values, JSONObject errors) throws Exception {
+        RFIDReader rd = requireReader();
+        int max = rd.ReaderCapabilities.getMaxNumOperationsInAccessSequence();
+        Log.i("MC3390R.Rfid", "Access sequence capacity=" + max);
+        if (max < 4) throw new IllegalStateException("Reader supports fewer than four sequence operations");
+        TagAccess.Sequence sequence = rd.Actions.TagAccess.OperationSequence;
+        AccessFilter filter = new AccessFilter();
+        filter.TagPatternA.setMemoryBank(MEMORY_BANK.MEMORY_BANK_EPC);
+        filter.TagPatternA.setBitOffset(32);
+        filter.TagPatternA.setTagPattern(epc);
+        filter.TagPatternA.setTagPatternBitCount(epc.length() * 4);
+        filter.TagPatternA.setTagMask(epc.replaceAll(".", "F"));
+        filter.TagPatternA.setTagMaskBitCount(epc.length() * 4);
+        filter.setAccessFilterMatchPattern(FILTER_MATCH_PATTERN.A);
+        Antennas.SingulationControl original = rd.Config.Antennas.getSingulationControl(1);
+        SESSION originalSession = original.getSession();
+        Antennas.SingulationControl accessControl = rd.Config.Antennas.getSingulationControl(1);
+        accessControl.setSession(SESSION.SESSION_S0);
+        rd.Config.Antennas.setSingulationControl(1, accessControl);
+        sequence.deleteAll();
+        try {
+            for (String bank : new String[]{"EPC", "TID", "USER", "RESERVED"}) {
+                TagAccess.Sequence.Operation operation = sequence.new Operation();
+                operation.setAccessOperationCode(ACCESS_OPERATION_CODE.ACCESS_OPERATION_READ);
+                operation.ReadAccessParams.setMemoryBank(memoryBank(bank));
+                operation.ReadAccessParams.setOffset(0);
+                operation.ReadAccessParams.setCount(bank.equals("EPC") ? epc.length()/4+2 : bank.equals("RESERVED") ? 4 : 0);
+                operation.ReadAccessParams.setAccessPassword(password);
+                sequence.add(operation);
             }
+            rd.Actions.purgeTags();
+            TriggerInfo sequenceTrigger = new TriggerInfo();
+            sequenceTrigger.StartTrigger.setTriggerType(START_TRIGGER_TYPE.START_TRIGGER_TYPE_IMMEDIATE);
+            sequenceTrigger.StopTrigger.setTriggerType(STOP_TRIGGER_TYPE.STOP_TRIGGER_TYPE_IMMEDIATE);
+            sequence.performSequence(filter, sequenceTrigger, antenna);
+            long deadline = SystemClock.elapsedRealtime() + 2000;
+            while (SystemClock.elapsedRealtime() < deadline && values.length()+errors.length()<4) {
+                TagData[] tags = rd.Actions.getReadTags(1000);
+                if (tags != null) for (TagData tag : tags) {
+                    if (!epc.equalsIgnoreCase(tag.getTagID()) || tag.getOpCode()!=ACCESS_OPERATION_CODE.ACCESS_OPERATION_READ) continue;
+                    String bank = tag.getMemoryBank()==MEMORY_BANK.MEMORY_BANK_EPC?"EPC":tag.getMemoryBank()==MEMORY_BANK.MEMORY_BANK_TID?"TID":tag.getMemoryBank()==MEMORY_BANK.MEMORY_BANK_USER?"USER":tag.getMemoryBank()==MEMORY_BANK.MEMORY_BANK_RESERVED?"RESERVED":null;
+                    if (bank == null) continue;
+                    if (tag.getOpStatus()==ACCESS_OPERATION_STATUS.ACCESS_SUCCESS) { values.put(bank,WritePolicy.hex(tag.getMemoryBankData(),false));errors.remove(bank); }
+                    else errors.put(bank,"Read failed: "+tag.getOpStatus());
+                }
+                Thread.sleep(10);
+            }
+        } finally {
+            try { sequence.stopSequence(); } catch (OperationFailureException stopped) { if(stopped.getResults()!=RFIDResults.RFID_NO_INVENTORY_IN_PROGRESS)throw stopped; } finally { try { sequence.deleteAll(); } finally { original.setSession(originalSession); rd.Config.Antennas.setSingulationControl(1, original); } }
         }
-        if (observed == null) throw new IllegalStateException("No readable memory found in this bank");
-        return observed;
     }
 
     private MEMORY_BANK memoryBank(String bank) {
@@ -336,13 +375,14 @@ public final class RfidBridge {
         params.setAccessPassword(password);
         TagData tag = rd.Actions.TagAccess.readWait(epc, params, null, true);
         if (tag == null) throw new IllegalStateException("No read-back returned by the reader");
+        if (!epc.equalsIgnoreCase(tag.getTagID())) throw new IllegalStateException("Reader returned data for a different tag");
         ACCESS_OPERATION_STATUS status = tag.getOpStatus();
         if (status != null && status != ACCESS_OPERATION_STATUS.ACCESS_SUCCESS) {
             throw new BankReadException("Read failed: " + status,
                     status == ACCESS_OPERATION_STATUS.ACCESS_TAG_MEMORY_OVERRUN_ERROR);
         }
         String data = WritePolicy.hex(tag.getMemoryBankData(), false);
-        if (data.length() != countWords * 4) throw new IllegalStateException("Reader returned a shorter memory range than requested");
+        if (countWords > 0 && data.length() != countWords * 4) throw new IllegalStateException("Reader returned a shorter memory range than requested");
         return data;
     }
 

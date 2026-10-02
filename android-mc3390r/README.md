@@ -43,3 +43,5 @@ Run the Java unit tests and APK build above. `node --test scripts/test-mobile.mj
 The supplied project includes a known Android <=9 compatibility fix that sets the SDK's internal `API3Utils.m_scontext` before SERVICE_SERIAL enumeration. The bridge documents this vendor SDK workaround; it is not a simulated reader or substitute SDK.
 
 The scan tone uses 100% application gain and follows the device Media volume without changing system volume. A dedicated DataWedge profile disables barcode input only for this app. Bank reads stop their access session and allow firmware to settle before subsequent reads.
+
+Memory details use an EPC-filtered four-read Access Sequence when supported. Whole-bank reads avoid repeated capacity probes. The access sequence uses session S0 temporarily and restores the previous session. Missing sequence results fall back to targeted reads; RF errors remain visible.

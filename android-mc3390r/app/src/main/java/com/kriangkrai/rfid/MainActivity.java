@@ -23,8 +23,17 @@ public final class MainActivity extends Activity {
     private RfidBridge bridge;
     private final BroadcastReceiver dataWedgeResult = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
-            Log.i("MC3390R.Barcode", "DataWedge " + intent.getStringExtra("COMMAND_IDENTIFIER")
-                    + ": " + intent.getStringExtra("RESULT") + " " + intent.getBundleExtra("RESULT_INFO"));
+            Bundle info = intent.getBundleExtra("RESULT_INFO");
+            if ("RFID_ONLY_PROFILE".equals(intent.getStringExtra("COMMAND_IDENTIFIER")) && info != null
+                    && "APP_ALREADY_ASSOCIATED".equals(info.getString("RESULT_CODE"))) configureRfidOnlyProfile(false);
+            for (String key : intent.getExtras().keySet()) {
+                Object value = intent.getExtras().get(key);
+                if (value instanceof Bundle) {
+                    Bundle bundle = (Bundle) value;
+                    for (String child : bundle.keySet()) Log.i("MC3390R.Barcode", key + "." + child + "=" + bundle.get(child));
+                } else Log.i("MC3390R.Barcode", key + "=" + value);
+            }
+
         }
     };
     private static IntentFilter dataWedgeFilter() {
@@ -32,7 +41,8 @@ public final class MainActivity extends Activity {
         filter.addCategory(Intent.CATEGORY_DEFAULT);
         return filter;
     }
-    private void configureRfidOnlyProfile() {
+    private void configureRfidOnlyProfile() { configureRfidOnlyProfile(true); }
+    private void configureRfidOnlyProfile(boolean associate) {
         Intent create = new Intent("com.symbol.datawedge.api.ACTION");
         create.putExtra("com.symbol.datawedge.api.CREATE_PROFILE", "MC3390R_RFID_ONLY");
         sendBroadcast(create);
@@ -43,13 +53,17 @@ public final class MainActivity extends Activity {
         Bundle app = new Bundle();
         app.putString("PACKAGE_NAME", getPackageName());
         app.putStringArray("ACTIVITY_LIST", new String[]{"*"});
-        config.putParcelableArray("APP_LIST", new Bundle[]{app});
+        // Association is installed once; repeating it produces APP_ALREADY_ASSOCIATED.
+        if (associate) config.putParcelableArray("APP_LIST", new Bundle[]{app});
         Bundle plugin = new Bundle(), params = new Bundle();
         plugin.putString("PLUGIN_NAME", "BARCODE");
-        plugin.putString("RESET_CONFIG", "false");
+        plugin.putString("RESET_CONFIG", "true");
         params.putString("scanner_input_enabled", "false");
+        params.putString("scanner_selection", "auto");
         plugin.putBundle("PARAM_LIST", params);
-        config.putBundle("PLUGIN_CONFIG", plugin);
+        java.util.ArrayList<Bundle> plugins = new java.util.ArrayList<>();
+        plugins.add(plugin);
+        config.putParcelableArrayList("PLUGIN_CONFIG", plugins);
         Intent command = new Intent("com.symbol.datawedge.api.ACTION");
         command.putExtra("com.symbol.datawedge.api.SET_CONFIG", config);
         command.putExtra("SEND_RESULT", "true");
@@ -96,6 +110,7 @@ public final class MainActivity extends Activity {
     private static boolean localPage(String url) { return url.equals(PAGE) || url.startsWith(PAGE + "#"); }
     @Override protected void onResume() {
         super.onResume();
+        configureRfidOnlyProfile();
         if (web != null) web.onResume();
         if (bridge != null) bridge.resume();
     }
