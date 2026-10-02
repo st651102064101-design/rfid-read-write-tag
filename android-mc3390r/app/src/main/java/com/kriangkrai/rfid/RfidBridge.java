@@ -467,7 +467,8 @@ public final class RfidBridge {
             if (!beepGate.shouldPlay(SystemClock.elapsedRealtime(), scanBeepEligible() && epoch == beepEpoch.get(), true)) return;
             try {
                 if (scanTone == null) scanTone = new ToneGenerator(AudioManager.STREAM_MUSIC, 80);
-                boolean accepted = scanTone.startTone(ToneGenerator.TONE_PROP_BEEP, 80);
+                scanTone.stopTone();
+                boolean accepted = scanTone.startTone(ToneGenerator.TONE_PROP_BEEP, 20);
                 if (accepted && debugBuild) Log.d("MC3390R.Rfid", "Scan beep accepted at " + SystemClock.elapsedRealtime() + " ms");
             } catch (RuntimeException error) {
                 Log.w("MC3390R.Rfid", "Scan sound unavailable", error);

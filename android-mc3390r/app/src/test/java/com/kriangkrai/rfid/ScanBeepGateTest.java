@@ -4,13 +4,11 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class ScanBeepGateTest {
-    @Test public void firstValidReadIsImmediateAndDenseReadsAreThrottled() {
+    @Test public void followsActualReadEventsAtThirtyMillisecondsAndFaster() {
         ScanBeepGate gate = new ScanBeepGate();
-        assertTrue(gate.shouldPlay(0, true, true));
-        for (int ms = 1; ms < 300; ms++) assertFalse(gate.shouldPlay(ms, true, true));
-        assertTrue(gate.shouldPlay(300, true, true));
-        assertFalse(gate.shouldPlay(599, true, true));
-        assertTrue(gate.shouldPlay(600, true, true));
+        for (int ms = 0; ms <= 3000; ms += 30) assertTrue(gate.shouldPlay(ms, true, true));
+        assertTrue(gate.shouldPlay(3001, true, true));
+        assertTrue(gate.shouldPlay(3002, true, true));
     }
     @Test public void emptyOrInvalidEpcsDoNotProduceScanSounds() {
         assertFalse(ScanBeepGate.isCompleteEpc(null));
@@ -36,7 +34,7 @@ public class ScanBeepGateTest {
         ScanBeepGate gate = new ScanBeepGate();
         assertTrue(gate.shouldPlay(1000, true, true));
         assertTrue(gate.shouldPlay(1000000, true, true));
-        for (int ms = 1000000; ms < 1000300; ms++) assertFalse(gate.shouldPlay(ms, true, true));
+        assertTrue(gate.shouldPlay(1000030, true, true));
         assertTrue(gate.shouldPlay(1000300, true, true));
     }
     @Test public void invalidOrRewindingClockDoesNotBypassTheLimit() {
@@ -44,7 +42,7 @@ public class ScanBeepGateTest {
         assertFalse(gate.shouldPlay(-1, true, true));
         assertTrue(gate.shouldPlay(1000, true, true));
         assertFalse(gate.shouldPlay(500, true, true));
-        assertFalse(gate.shouldPlay(1299, true, true));
+        assertTrue(gate.shouldPlay(1001, true, true));
         assertTrue(gate.shouldPlay(1300, true, true));
     }
 }

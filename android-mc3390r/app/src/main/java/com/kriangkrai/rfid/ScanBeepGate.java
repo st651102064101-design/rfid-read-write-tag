@@ -2,7 +2,6 @@ package com.kriangkrai.rfid;
 
 /** Monotonic, event-driven gate: no timer or accumulated beeps after a pause. */
 final class ScanBeepGate {
-    private static final long INTERVAL_MS = 300;
     private long lastPlayedMs = -1;
 
     static boolean isCompleteEpc(String epc) {
@@ -11,7 +10,7 @@ final class ScanBeepGate {
 
     synchronized boolean shouldPlay(long nowMs, boolean active, boolean validBatch) {
         if (!active || !validBatch || nowMs < 0) return false;
-        if (lastPlayedMs >= 0 && (nowMs < lastPlayedMs || nowMs - lastPlayedMs < INTERVAL_MS)) return false;
+        if (lastPlayedMs >= 0 && nowMs < lastPlayedMs) return false;
         lastPlayedMs = nowMs;
         return true;
     }

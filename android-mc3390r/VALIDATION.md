@@ -48,3 +48,7 @@ Five unit tests cover valid complete-byte EPCs, empty/invalid batches, the 300 m
 ## Version 1.0.3 — physical trigger controls
 Removed the Tag reading switch and its polling from the MC3390R UI. All 23 mobile tests pass; APK build succeeds. Installed over Wi-Fi on the MC3390R: SDK connected, switch absent, antenna power remains 6.8 dBm, and no horizontal overflow. Native trigger handling, scan sound and portrait lock are unchanged.
 
+
+## Version 1.0.4 — scan cadence
+Removed the 300 ms beep rate limit. Each delivered valid inventory batch requests a 20 ms tone; pending callbacks coalesce and stale/background/access events remain suppressed. Java unit tests pass (12 total), including 101 events spaced 30 ms apart and faster consecutive events. APK built and installed successfully over Wi-Fi. Actual acoustic 30 ms cadence is not yet measured on hardware.
+
