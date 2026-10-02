@@ -1,4 +1,3 @@
-import {setReading} from './reading-control.mjs';
 import {readPowerState,setTransmitPower} from './power-control.mjs';
 import {setReading} from './reading-control.mjs';
 import http from 'node:http';
