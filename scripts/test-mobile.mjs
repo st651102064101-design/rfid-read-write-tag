@@ -283,3 +283,12 @@ test('inventory preserves SDK signal metadata and Details reads banks without ch
   assert.match(a.doc.getElementById('tagDrawerContent').textContent,/E28012345678/);
  }finally{a.close();}
 });
+
+test('memory reads do not refresh the last inventory timestamp or count as scans',async()=>{
+ const a=await setup({connected:true});try{
+  await a.scan();const before=(await(await a.w.fetch('/api/events')).json()).events[0];
+  const pending=a.w.NativeRfid.command('banks',{epc});a.reply('banks',{status:'success',banks:{TID:'E2801234'}});await pending;
+  const after=(await(await a.w.fetch('/api/events')).json()).events[0];
+  assert.equal(after.receivedAt,before.receivedAt);assert.equal(after.payload[0].type,'MEMORY_READ');assert.equal(after.payload[0].data.TID,'E2801234');
+ }finally{a.close();}
+});

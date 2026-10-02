@@ -334,7 +334,7 @@ public final class RfidBridge {
         params.setOffset(offsetWords);
         params.setCount(countWords);
         params.setAccessPassword(password);
-        TagData tag = rd.Actions.TagAccess.readWait(epc, params, antenna);
+        TagData tag = rd.Actions.TagAccess.readWait(epc, params, null, true);
         if (tag == null) throw new IllegalStateException("No read-back returned by the reader");
         ACCESS_OPERATION_STATUS status = tag.getOpStatus();
         if (status != null && status != ACCESS_OPERATION_STATUS.ACCESS_SUCCESS) {

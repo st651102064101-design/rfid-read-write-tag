@@ -60,3 +60,7 @@ Hardware reproduced access sessions stuck with Operation In Progress. Read sessi
 ## Version 1.0.6 — sound gain and RFID-only input
 ToneGenerator gain is now 100% of Media stream volume; no system volume is changed. Dedicated MC3390R_RFID_ONLY DataWedge profile disables barcode input for this package. Device returned RFID_ONLY_PROFILE SUCCESS. Unit tests pass (15 Java, 25 mobile), APK built and installed. Subjective loudness needs user confirmation. Subsequent bank reads returned access failures for the old targets; further hardware verification is pending a fresh scan. Earlier BOX-003 TID/RESERVED success does not establish reliable reads for all tags.
 
+
+## Version 1.0.7 — targeted reads verified
+Using SDK readWait with EPC prefilter enabled resolved bank access on the currently inventoried E2806F12000000022DF13118 tag. Actual read returned EPC 28273000E2806F12000000022DF13118, TID E2806F12200094022DF13118, USER 256 bytes and RESERVED 0000000000000000, no readableErrors, 7306 ms. Temporary transmit power test restored the original setting; successful full read was at the user's 2.9 dBm setting. Memory results retain the original inventory timestamp and are excluded from scan counts. All 26 mobile tests pass.
+

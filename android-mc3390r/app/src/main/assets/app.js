@@ -74,7 +74,7 @@ function renderEvents(events){
  for(const event of [...events].sort((a,b)=>Number(a.id)-Number(b.id))){
   const epcs=findEpcs(event.payload);
   if(!epcs.length)continue;
-  for(const epc of epcs){const item=grouped.get(epc)||{event,epc,count:0};item.event=event;item.count++;grouped.set(epc,item);}
+  for(const epc of epcs){const item=grouped.get(epc)||{event,epc,count:0};item.event=event;if(!event.payload.every(record=>record.type==='MEMORY_READ'))item.count++;grouped.set(epc,item);}
  }
   display.push(...grouped.values());
   display.sort((a,b)=>Date.parse(b.event.receivedAt)-Date.parse(a.event.receivedAt));
