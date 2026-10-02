@@ -136,19 +136,19 @@ function expireOldReads(){
 }
 let statusBusy=false;
 function setReaderStatus(state,label){const node=$('readerStatus');if(!node)return;node.classList.remove('online','offline','unknown');node.classList.add(state);node.replaceChildren(el('i'),document.createTextNode(label));}
-function elapsedLabel(ms){if(ms<1000)return 'just now';if(ms<60000)return Math.floor(ms/1000)+' seconds ago';return Math.floor(ms/60000)+' minutes ago';}
+function hasRecentReaderData(){return [...tagChoices.values()].some(tag=>{const age=Date.now()-Date.parse(tag.lastAt);return Number.isFinite(age)&&age>=0&&age<=15000;});}
 async function pollReaderStatus(){
  if(document.hidden||statusBusy)return;statusBusy=true;
  try{
   const response=await fetch('/api/reader/status',{cache:'no-store',signal:AbortSignal.timeout(8000)}),data=await response.json();
   if(!response.ok||!data.ok)throw Error(data.error||'Unable to read heartbeat status');
   const latest=data.readers?.[0];
-  if(!latest){setReaderStatus('unknown','Offline');return;}
+  if(!latest){const online=hasRecentReaderData();setReaderStatus(online?'online':'offline',online?'Online':'Offline');return;}
   const at=Date.parse(latest.receivedAt),age=Math.max(0,Date.now()-at),previous=Date.parse(latest.previousAt||'');
   const timeout=Number.isFinite(previous)?Math.max(5000,Math.min(60000,(at-previous)*3)):180000;
-  const online=Number.isFinite(at)&&age<=timeout;
+  const online=hasRecentReaderData()||(Number.isFinite(at)&&age<=timeout);
   setReaderStatus(online?'online':'offline',online?'Online':'Offline');
- }catch(e){setReaderStatus('unknown','Offline');}
+ }catch(e){const online=hasRecentReaderData();setReaderStatus(online?'online':'unknown',online?'Online':'Offline');}
  finally{statusBusy=false;}
 }
 $('latestEvents').textContent='Latest data';
