@@ -1,0 +1,31 @@
+/* Local SDK transport. No server, credentials or network tunnel is used. */
+(function(){
+ if(!crypto.randomUUID)crypto.randomUUID=function(){const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;const h=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);};
+ if(!AbortSignal.timeout)AbortSignal.timeout=function(ms){const c=new AbortController();setTimeout(()=>c.abort(),ms);return c.signal;};
+ const pending=new Map(),results=new Map(),events=[],banks=new Map();let nextEvent=0;
+ let readerState={connected:false,reading:false,powerDbm:null,minDbm:null,maxDbm:null,message:'Connect the integrated reader'};
+ function call(operation,body,requestId){const id=requestId||crypto.randomUUID();return new Promise((resolve,reject)=>{if(!window.AndroidRfid||typeof AndroidRfid.command!=='function'){reject(Error('This screen requires the MC3390R Android app'));return;}const timer=setTimeout(()=>{pending.delete(id);reject(Error('Reader result timed out. Check the tag before retrying.'));},120000);pending.set(id,{resolve,reject,timer,operation,body});try{AndroidRfid.command(id,operation,JSON.stringify(body||{}));}catch(error){clearTimeout(timer);pending.delete(id);reject(error);}});}
+ function saveTags(tags){const records=tags.filter(t=>/^(?:[0-9a-f]{2})+$/i.test(t.epc||'')).map(t=>({type:'INVENTORY',data:{idHex:t.epc.toUpperCase(),peakRssi:t.rssi,antenna:1,...(banks.get(t.epc.toUpperCase())||{})}}));if(!records.length)return;events.push({id:++nextEvent,receivedAt:new Date().toISOString(),payload:records});if(events.length>200)events.splice(0,events.length-200);}
+ function invalidateBanks(epc){const target=epc&&epc.toUpperCase();if(target)banks.delete(target);else banks.clear();for(const event of events)for(const record of event.payload){if(!target||record.data.idHex===target)for(const bank of ['EPC','TID','USER','RESERVED'])delete record.data[bank];}window.dispatchEvent(new CustomEvent('memoryinvalidated',{detail:{epc:target||null}}));}
+ window.NativeRfid={
+  get currentState(){return {...readerState};},
+  command:call,
+  invalidateBanks,
+  back:function(){const open=document.querySelector("dialog[open]");if(!open)return false;const close=open.querySelector("[aria-label^=Close]");if(close)close.click();else if(open.close)open.close();else open.removeAttribute("open");return true;},
+  tags:saveTags,
+  state:function(state){if(readerState.connected&&state.connected===false)invalidateBanks();readerState={...readerState,...state};window.dispatchEvent(new CustomEvent('readerstate',{detail:readerState}));},
+  reply:function(id,result){const p=pending.get(id);if(!p)return;clearTimeout(p.timer);pending.delete(id);const value={...result,requestId:id};if(p.operation==='write'){value.epc=p.body.epc;invalidateBanks(p.body.epc);if(value.newEpc&&value.newEpc!==p.body.epc)invalidateBanks(value.newEpc);}if(p.operation==='banks'&&value.status==='success'&&value.banks){const merged={...value.banks,...(value.readableErrors||{})};banks.set(p.body.epc,merged);saveTags([{epc:p.body.epc}]);}p.resolve(value);}
+ };
+ function response(body,status=200){return Promise.resolve({ok:status>=200&&status<300,status,json:()=>Promise.resolve(body)});}
+ function queue(operation,body){if(!readerState.connected)return response({error:'Integrated reader is disconnected'},503);if(!/^[a-z0-9-]{8,80}$/i.test(body.requestId||''))return response({error:'Invalid request ID'},422);if(results.has(body.requestId))return response({requestId:body.requestId,status:results.get(body.requestId).status},202);results.set(body.requestId,{requestId:body.requestId,epc:body.epc,status:'running'});call(operation,body,body.requestId).then(value=>results.set(body.requestId,value),error=>results.set(body.requestId,{requestId:body.requestId,epc:body.epc,status:'unknown',verified:false,message:error.message}));while(results.size>200)results.delete(results.keys().next().value);return response({requestId:body.requestId,status:'queued'},202);}
+ window.fetch=function(path,init){const url=new URL(path,'https://local.invalid'),method=(init&&init.method)||'GET';let body;try{body=init&&init.body?JSON.parse(init.body):{};}catch{return response({error:'Invalid JSON'},422);}
+  if(url.pathname==='/api/events'||url.pathname==='/api/events/live'){const after=Number(url.searchParams.get('after')||0);return response({ok:true,events:events.filter(e=>e.id>after).slice(-100).reverse(),nextBefore:null});}
+  if(url.pathname==='/api/reader/status')return response({ok:true,readers:readerState.connected?[{receivedAt:new Date().toISOString()}]:[]});
+  if(url.pathname==='/api/write/config')return response({ok:true,available:readerState.connected});
+  if(url.pathname==='/api/reader/control')return method==='POST'?queue('reading',body):response({ok:true,available:readerState.connected,reading:readerState.connected?readerState.reading:null});
+  if(url.pathname==='/api/reader/power')return method==='POST'?queue('power',body):response({ok:true,available:readerState.connected&&Number.isFinite(readerState.powerDbm),powerDbm:readerState.powerDbm,minDbm:readerState.minDbm,maxDbm:readerState.maxDbm,step:readerState.powerLevels&&readerState.powerLevels.length>1?Math.min.apply(null,readerState.powerLevels.slice(1).map((v,i)=>Math.round((v-readerState.powerLevels[i])*100)/100).filter(v=>v>0)):1});
+  if(url.pathname==='/api/write'&&method==='POST')return queue('write',body);
+  if(url.pathname==='/api/write/result')return results.has(url.searchParams.get('requestId'))?response(results.get(url.searchParams.get('requestId'))):response({error:'Request not found'},404);
+  return response({error:'Network access is not available in the offline reader app'},404);
+ };
+})();

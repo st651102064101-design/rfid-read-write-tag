@@ -3,3 +3,10 @@ site.tar.gz
 node_modules/
 package-stage/
 .sites-runtime/
+
+android-mc3390r/.gradle/
+android-mc3390r/.sdk-inspect/
+android-mc3390r/local.properties
+android-mc3390r/**/build/
+android-mc3390r/**/*.aar
+android-mc3390r/*.apk
