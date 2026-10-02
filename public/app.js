@@ -161,7 +161,7 @@ pollReaderStatus();setInterval(pollReaderStatus,1000);
 function updateTagDetails(item){
  const detected=!!item?.epc&&!!item.event&&isRecent(item.event);document.querySelector('.panel.editor').hidden=!detected;document.querySelector('.selectionPanel').hidden=!detected;
 
- const compact=$('selectedTagSummary');if(compact){compact.replaceChildren();compact.append(el('strong',item?(epcAscii(item.epc)||item.epc):'No tag selected'));if(item)compact.append(el('small','Ready to prepare data for this tag'));}
+ const compact=$('selectedTagSummary');if(compact){compact.replaceChildren();compact.append(el('strong',item?(epcAscii(item.epc)||item.epc):'No tag selected'));if(item)compact.append(el('small','Writes will use this tag'));}
 
  const panel=$('tagDetails');if(!panel)return;
  if(!item){selectedEpc='';if($('epc'))$('epc').value='';if($('userCapability'))$('userCapability').textContent='USER status appears when the reader returns tag data';panel.replaceChildren(el('p','No tag detected in the last 5 seconds. Details appear after a reader scan.','empty'));return;}

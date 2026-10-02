@@ -57,8 +57,8 @@ test('built page starts without removed webhook controls, shows fresh tags, and 
  assert.doesNotMatch(a.doc.getElementById('feedStatus').textContent,/Loading/);
  }finally{a.close();}
 });
-test('user can select a previously read EPC from the dropdown',async()=>{
- const a=await setup([event(2,'CCDD'),event(1,'AABB')]);try{const select=a.doc.getElementById('epc');select.value='AABB';select.dispatchEvent(new a.dom.window.Event('change'));
+test('tag list is the only visible selection point and prepares the write target',async()=>{
+ const a=await setup([event(2,'CCDD'),event(1,'AABB')]);try{const select=a.doc.getElementById('epc');a.doc.querySelector('.eventcard[data-epc="AABB"]>summary').click();assert.equal(select.hidden,true);assert.equal(a.doc.querySelector('label[for=epc]'),null);
  assert.equal(select.value,'AABB');assert.match(a.doc.getElementById('tagDetails').textContent,/EPC · AABB/);const preview=a.dom.window.document.getElementById('writer');
  a.doc.getElementById('offset').value='0';a.doc.getElementById('data').value='OK';a.doc.getElementById('data').dispatchEvent(new a.dom.window.Event('input'));
  assert.equal(a.dom.window.document.getElementById('tagDetails').textContent.includes('EPC · AABB'),true);
