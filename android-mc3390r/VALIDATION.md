@@ -108,3 +108,12 @@ All Java tests pass, including the one-million-report pipeline test, 256-byte wr
 - Read actual EPC, TID, USER and RESERVED on designated E2806F12000000022DF13118 in 436 ms with no bank errors. The complete scan profile remained S0/AB/32/mode 21 before and after. Value snapshots prevent SDK access filtering from retaining the mutated inventory state after memory access or writes. No tag data was modified during these speed checks.
 - Java **28/28** and interface **36/36** tests passed; debug APK assembled successfully. Load tests preserve one million Java reports across 1000 tags and 100000 interface reports; they prove software count preservation and scheduling, not a universal physical maximum.
 - Reproducible measurements: `benchmarks/2026-10-05-scan.json`. This is the fastest consistently verified setup among the tested configurations in these conditions; tag placement and RF conditions can change the rate.
+
+
+### Selected USER reset and scan ranking
+
+- Reset dialog requires explicit unchecked-by-default tag checkboxes and at least one selection. The submitted target snapshot contains only checked EPCs.
+- Completion closes the dialog and emits a success alert only when every selected tag is verified; skipped, failed, uncertain or stopped operations emit an incomplete alert.
+- Live cards reorder by descending cumulative read count, with latest observation and EPC as tie-breakers. Reused cards move when rankings change.
+- Interface tests: 38/38 passed, including selected-target isolation, successful/failed completion and card reorder; Java tests: 28/28 passed.
+- Hardware reset verification initially blocked by RFID_CHARGING_COMMAND_NOT_ALLOWED. No tag changes occurred in that blocked attempt.

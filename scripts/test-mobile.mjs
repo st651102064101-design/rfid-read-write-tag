@@ -346,11 +346,12 @@ test('factory reset writes 00 across every readable USER bank and continues afte
   await a.scan([{epc,rssi:-40},{epc:secondEpc,rssi:-50},{epc:'E2801191A5030069565F9436',rssi:-55}]);
   a.doc.getElementById('factoryReset').click();
   assert.equal(a.doc.getElementById('factoryResetDialog').open,true);
-  assert.match(a.doc.getElementById('factoryResetStatus').textContent,/3 tags/);
+  assert.equal(a.doc.querySelectorAll('#factoryResetTargets input').length,3);assert.equal(a.doc.getElementById('confirmFactoryReset').disabled,true);
   a.doc.getElementById('cancelFactoryReset').click();
   assert.equal(a.doc.getElementById('factoryResetDialog').open,false);
   assert.equal(a.commands.filter(c=>c.operation==='banks'||c.operation==='write').length,0);
   a.doc.getElementById('factoryReset').click();
+  for(const box of a.doc.querySelectorAll('#factoryResetTargets input')){box.checked=true;box.dispatchEvent(new a.w.Event('change'));}
   const pending=a.doc.getElementById('confirmFactoryReset').onclick();
   const answers={'E2806F12000000022DF13118':{status:'success',banks:{USER:'35'.repeat(4)},readableErrors:{}},'E28069150000401ECAB4A8D5':{status:'success',banks:{},readableErrors:{USER:'Read failed: ACCESS_TAG_MEMORY_OVERRUN_ERROR'}},'E2801191A5030069565F9436':{status:'success',banks:{USER:'3535'},readableErrors:{}}};
   for(let i=0;i<3;i++){
@@ -386,5 +387,29 @@ test('rapid UI updates reuse tag cards and lazily build details with exact read 
   assert.match(a.doc.getElementById('feedStatus').textContent,/4002 total reads/);
   assert.equal(a.commands.filter(c=>c.operation==='banks').length,0);
   a.doc.querySelector('.tagDetailButton').click();assert.equal(a.doc.querySelectorAll('#tagDrawerContent .memoryCard').length,4);
+ }finally{a.close();}
+});
+
+test('reset sends commands only for checked tags and closes with verified success alert',async()=>{
+ const a=await setup({ui:true,connected:true});try{
+  await a.scan([{epc,seenCount:10},{epc:secondEpc,seenCount:1}]);
+  a.doc.getElementById('factoryReset').click();
+  const box=[...a.doc.querySelectorAll('#factoryResetTargets input')].find(x=>x.value===secondEpc);
+  box.checked=true;box.dispatchEvent(new a.w.Event('change'));
+  const pending=a.doc.getElementById('confirmFactoryReset').onclick();await flush();
+  assert.equal(a.last('banks').body.epc,secondEpc);
+  a.reply('banks',{status:'success',banks:{USER:'3535'}});await flush();
+  assert.equal(a.last('write').body.epc,secondEpc);a.reply('write',{status:'success',verified:true});await pending;
+  assert.equal(a.commands.filter(c=>c.operation==='write').length,1);
+  assert.equal(a.doc.getElementById('factoryResetDialog').open,false);
+  assert.match(a.doc.getElementById('toast').textContent,/Reset successful/);
+ }finally{a.close();}
+});
+test('tag list ranks the most repeatedly read tag above a more recent tag',async()=>{
+ const a=await setup({ui:true,connected:true,reading:true});try{
+  await a.scan([{epc,seenCount:20}]);await a.scan([{epc:secondEpc,seenCount:2}]);
+  assert.equal(a.doc.querySelector('.eventcard').dataset.epc,epc);
+  await a.scan([{epc:secondEpc,seenCount:30}]);
+  assert.equal(a.doc.querySelector('.eventcard').dataset.epc,secondEpc);
  }finally{a.close();}
 });

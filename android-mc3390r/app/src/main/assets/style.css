@@ -45,3 +45,5 @@
 .readerSidebar .mobileHint{grid-column:1/-1;margin:0}.readerSidebar .mobileHint:empty{display:none}.connectReader[hidden]{display:none}
 
 .readerSidebar .powerControl{grid-column:1/-1}
+
+#factoryResetTargets{display:grid;gap:12px;max-height:40vh;overflow:auto;margin:16px 0}#factoryResetTargets label{display:flex;align-items:center;gap:12px;overflow-wrap:anywhere}#factoryResetTargets input{width:20px;height:20px;flex-shrink:0}
