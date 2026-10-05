@@ -513,22 +513,93 @@ resetButton.onclick=async()=>{
  busy=true;update();writeProgress.querySelector('strong').textContent='Resetting and verifying...';setWriteUiLocked(true);
  const messages=[];let failed=false;
  try{
-  const read=await NativeRfid.command('banks',{epc,accessPassword:password});
-  if(read.status!=='success')throw Error(read.message||'Unable to read memory. Reset was not sent.');
-  // Change passwords before EPC; change EPC last so all preceding operations retain the target.
-  for(const bank of ['USER','TID','RESERVED','EPC'].filter(bank=>selected.includes(bank))){
-   const hex=bank==='EPC'?epc:read.banks?.[bank];
-   if(typeof hex!=='string'||!/^(?:[0-9A-F]{4})+$/i.test(hex)||hex.length/2>1024){failed=true;messages.push(bank+': '+(read.readableErrors?.[bank]||'No complete readable memory. Not reset.'));continue;}
-   const length=hex.length/2;
-   const reply=await NativeRfid.command('write',{operation:'write',memoryBank:bank,epc,offsetBytes:bank==='EPC'?4:0,lengthBytes:length,accessPassword:password,confirmSensitive:bank==='TID'||bank==='RESERVED',dataHex:'00'.repeat(length)});
-   if(reply.status!=='success'||reply.verified!==true){failed=true;messages.push(bank+': '+actionableWriteMessage(reply.message||'Reset not confirmed. Read the tag before retrying.'));messages.push('Remaining selected items were not reset.');break;}
-   messages.push(bank+': '+length+' bytes cleared. Read-back verified.');
-   if(bank==='RESERVED'){password='00000000';$('accessPassword').value=password;}
-   if(bank==='EPC'&&reply.newEpc){epc=reply.newEpc;selectWrittenEpc(epc);}
-  }
+  const outcome=await resetTagMemory(epc,selected,password);
+  messages.push(...outcome.messages);failed=outcome.failed;
+  if(outcome.passwordChanged)$('accessPassword').value='00000000';
+  if(outcome.newEpc)selectWrittenEpc(outcome.newEpc);
  }catch(error){failed=true;messages.push(actionableWriteMessage(error.message));}
  finally{busy=false;setWriteUiLocked(false);writeProgress.querySelector('strong').textContent='Writing and verifying...';resetPanel.open=false;if(writeDialog.close)writeDialog.close();else writeDialog.removeAttribute('open');update();showWriteBadge(messages.join('\n'),failed?'Reset incomplete':'Reset successful',failed);}
 };
 
 const clearData=el('button','Clear');clearData.id='clearData';clearData.type='button';$('data').before(clearData);clearData.onclick=()=>{if(busy)return;editorDirty=true;clearRequested=true;$('data').value='';$('offset').value=$('memoryBank').value==='EPC'?'4':'0';update();};
 $('memoryBank').addEventListener('change',()=>loadExistingData());
+
+// Shared single / batch reset uses a fresh read and verifies each selected bank.
+async function resetTagMemory(epc,selected,password,onProgress=()=>{}){
+ const messages=[];let failed=false,passwordChanged=false,newEpc=null;
+ try{
+  if(!NativeRfid.currentState.connected)throw Error('Reader disconnected. Not reset.');
+  if(NativeRfid.currentState.reading||NativeRfid.currentState.triggerHeld)throw Error('Release the trigger. Not reset.');
+  onProgress('Reading memory...');
+  const read=await NativeRfid.command('banks',{epc,accessPassword:password});
+  if(read.status!=='success')throw Error(read.message||'Tag not reachable. Not reset.');
+  for(const bank of ['USER','TID','RESERVED','EPC'].filter(bank=>selected.includes(bank))){
+   const hex=bank==='EPC'?epc:read.banks?.[bank];
+   if(typeof hex!=='string'||!/^(?:[0-9A-F]{4})+$/i.test(hex)||hex.length/2>1024){failed=true;messages.push(bank+': '+(read.readableErrors?.[bank]||'No complete readable memory. Not reset.'));continue;}
+   const length=hex.length/2;onProgress('Resetting '+bank+'...');
+   const reply=await NativeRfid.command('write',{operation:'write',memoryBank:bank,epc,offsetBytes:bank==='EPC'?4:0,lengthBytes:length,accessPassword:password,confirmSensitive:bank==='TID'||bank==='RESERVED',dataHex:'00'.repeat(length)});
+   if(reply.status!=='success'||reply.verified!==true){messages.push(bank+': '+actionableWriteMessage(reply.message||'Reset not confirmed. Read before retrying.'),'Remaining selected memory was not reset.');return {failed:true,uncertain:reply.status!=='failed',messages,passwordChanged,newEpc};}
+   messages.push(bank+': '+length+' bytes cleared. Read-back verified.');
+   if(bank==='RESERVED'){password='00000000';passwordChanged=true;}
+   if(bank==='EPC'&&reply.newEpc)newEpc=reply.newEpc;
+  }
+ }catch(error){failed=true;messages.push(actionableWriteMessage(error.message));return {failed,uncertain:/timed out|timeout/i.test(error.message),messages,passwordChanged,newEpc};}
+ return {failed,messages,passwordChanged,newEpc};
+}
+const openMultiReset=el('button','Reset tags');openMultiReset.id='factoryReset';openMultiReset.type='button';openMultiReset.hidden=true;openMultiReset.setAttribute('aria-haspopup','dialog');openMultiReset.setAttribute('aria-controls','multiResetDialog');$('openTagFilter').after(openMultiReset);
+const multiResetDialog=el('dialog',undefined,'multiResetDialog');multiResetDialog.id='multiResetDialog';multiResetDialog.setAttribute('aria-labelledby','multiResetTitle');
+const multiHeader=el('div',undefined,'multiResetHeader'),multiTitle=el('h2','Reset tags');multiTitle.id='multiResetTitle';const multiClose=el('button');multiClose.type='button';multiClose.setAttribute('aria-label','Close reset tags');multiClose.innerHTML='<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';multiHeader.append(multiTitle,multiClose);
+const multiBody=el('div',undefined,'multiResetBody'),multiSetup=el('div');
+const multiHint=el('p','Select tags and memory to clear to 00. Tags must stay close to the reader.');
+const multiSearch=el('input');multiSearch.type='search';multiSearch.placeholder='Search name or EPC';multiSearch.setAttribute('aria-label','Search tags to reset');
+const multiSelectAll=el('button','Select visible');multiSelectAll.type='button';const multiTags=el('div',undefined,'multiResetTags');multiTags.setAttribute('role','group');multiTags.setAttribute('aria-label','Tags to reset');
+const multiBanks=resetOptions.cloneNode(true);for(const input of multiBanks.querySelectorAll('input')){input.name='batchResetBank';input.checked=input.value==='USER';}
+const multiPasswordLabel=el('label','Access password (optional)'),multiPassword=el('input');multiPassword.id='multiResetPassword';multiPassword.type='password';multiPassword.maxLength=8;multiPassword.autocomplete='off';multiPasswordLabel.htmlFor=multiPassword.id;
+const multiNote=el('p',undefined,'multiResetNote');multiNote.id='multiResetNote';multiNote.setAttribute('role','status');
+const multiProgress=el('p',undefined,'multiResetProgress');multiProgress.hidden=true;multiProgress.setAttribute('role','status');multiProgress.setAttribute('aria-live','polite');
+const multiResults=el('div',undefined,'multiResetResults');multiResults.id='multiResetResults';
+const multiFooter=el('div',undefined,'multiResetFooter'),multiStart=el('button','Reset selected tags');multiStart.id='startMultiReset';multiStart.type='button';multiFooter.append(multiStart);
+multiSetup.append(multiHint,multiSearch,multiSelectAll,multiTags,multiBanks,multiPasswordLabel,multiPassword,multiNote);multiBody.append(multiSetup,multiProgress,multiResults);multiResetDialog.append(multiHeader,multiBody,multiFooter);document.body.append(multiResetDialog);
+let multiRunning=false,multiLastResults=[];
+function showMultiDialog(){if(multiResetDialog.showModal)multiResetDialog.showModal();else multiResetDialog.setAttribute('open','');}
+function closeMultiDialog(){if(multiRunning)return;if(multiResetDialog.close)multiResetDialog.close();else multiResetDialog.removeAttribute('open');openMultiReset.focus();}
+multiClose.onclick=closeMultiDialog;multiResetDialog.addEventListener('cancel',event=>{if(multiRunning)event.preventDefault();});
+function multiSelectedTags(){return [...multiTags.querySelectorAll('input:checked')].map(input=>input.value);}
+function multiSelectedBanks(){return [...multiBanks.querySelectorAll('input:checked')].map(input=>input.value);}
+function refreshMultiReset(){
+ const tags=multiSelectedTags(),banks=multiSelectedBanks(),query=multiSearch.value.trim().toLowerCase();for(const row of multiTags.children)row.hidden=!!query&&!row.textContent.toLowerCase().includes(query);
+ const duplicateEpc=tags.length>1&&banks.includes('EPC'),badPassword=!!multiPassword.value&&!/^[0-9a-f]{8}$/i.test(multiPassword.value);
+ multiNote.textContent=duplicateEpc?'Reset EPC on one tag at a time to avoid duplicate IDs. Uncheck EPC to reset multiple tags.':badPassword?'Access password must be 8 HEX digits.':tags.length+' selected · '+banks.length+' memory banks';
+ multiStart.textContent='Reset '+tags.length+' selected '+(tags.length===1?'tag':'tags');multiStart.disabled=multiRunning||!tags.length||!banks.length||duplicateEpc||badPassword||!NativeRfid.currentState.connected;
+}
+openMultiReset.onclick=()=>{
+ if(busy||window.powerUiLocked)return;
+ multiSetup.hidden=false;multiFooter.hidden=false;multiProgress.hidden=true;multiResults.replaceChildren();multiSearch.value='';multiPassword.value='';multiTags.replaceChildren();
+ for(const item of [...tagChoices.values()].sort((a,b)=>b.count-a.count)){const row=el('label'),input=el('input');input.type='checkbox';input.value=item.epc;input.checked=selectionInitialized&&item.epc===selectedEpc;input.addEventListener('change',refreshMultiReset);const caption=el('span'),name=epcAscii(item.epc);caption.append(el('strong',name||item.epc));if(name)caption.append(el('small',item.epc));row.append(input,caption);multiTags.append(row);}
+ for(const input of multiBanks.querySelectorAll('input'))input.checked=input.value==='USER';refreshMultiReset();showMultiDialog();
+};
+multiSearch.addEventListener('input',refreshMultiReset);multiPassword.addEventListener('input',refreshMultiReset);multiBanks.addEventListener('change',refreshMultiReset);
+multiSelectAll.onclick=()=>{const visible=[...multiTags.children].filter(row=>!row.hidden),all=visible.length&&visible.every(row=>row.querySelector('input').checked);for(const row of visible)row.querySelector('input').checked=!all;refreshMultiReset();};
+const viewResetResults=el('button','View results');viewResetResults.id='viewResetResults';viewResetResults.type='button';viewResetResults.hidden=true;writeBadge.append(viewResetResults);viewResetResults.onclick=()=>{if(writeBadge.close)writeBadge.close();else writeBadge.removeAttribute('open');multiSetup.hidden=true;multiFooter.hidden=true;multiProgress.hidden=true;showMultiDialog();};
+const ordinaryShowWriteBadge=showWriteBadge;showWriteBadge=function(...args){viewResetResults.hidden=true;ordinaryShowWriteBadge(...args);};
+multiStart.onclick=async()=>{
+ if(multiRunning||busy||window.powerUiLocked)return;refreshMultiReset();if(multiStart.disabled)return;
+ if(NativeRfid.currentState.triggerHeld||NativeRfid.currentState.reading){multiNote.textContent='Release the trigger before resetting tags.';return;}
+ const targets=multiSelectedTags(),banks=multiSelectedBanks(),password=multiPassword.value.trim();
+ multiRunning=true;busy=true;setWriteUiLocked(true);update();multiSetup.hidden=true;multiProgress.hidden=false;multiResults.replaceChildren();multiLastResults=[];
+ try{
+  for(let index=0;index<targets.length;index++){
+   const epc=targets[index],name=epcAscii(epc)||epc,row=el('details'),summary=el('summary',name+' — Waiting'),detail=el('p');row.append(summary,detail);multiResults.append(row);
+   const outcome=await resetTagMemory(epc,banks,password,state=>{summary.textContent=name+' — '+state;multiProgress.textContent=(index+1)+' / '+targets.length+' · '+state+' Keep tags close. Do not pull the trigger.';});
+   multiLastResults.push({epc,...outcome});summary.textContent=name+' — '+(outcome.failed?'Not fully reset':'Reset verified');row.className=outcome.failed?'resetFailed':'resetVerified';detail.textContent=outcome.messages.join('\n');
+   if(outcome.newEpc&&selectedEpc===epc)selectWrittenEpc(outcome.newEpc);
+   if(outcome.passwordChanged&&selectedEpc===epc)$('accessPassword').value='00000000';
+   if(outcome.uncertain){for(const pending of targets.slice(index+1)){multiLastResults.push({epc:pending,failed:true,messages:['Not attempted: previous result was unconfirmed.']});const skipped=el('details');skipped.append(el('summary',(epcAscii(pending)||pending)+' — Not attempted'),el('p','Previous result was unconfirmed. Read the tag before retrying.'));multiResults.append(skipped);}break;}
+  }
+ }catch(error){multiLastResults.push({failed:true,messages:[error.message]});multiResults.append(el('p',error.message));}
+ finally{
+  busy=false;setWriteUiLocked(false);multiRunning=false;multiProgress.hidden=true;closeMultiDialog();update();const success=multiLastResults.filter(result=>!result.failed).length,failed=multiLastResults.filter(result=>result.failed).length;
+  showWriteBadge(success+' / '+targets.length+' tags reset and read-back verified.'+(failed?' '+failed+' not fully reset or not attempted.':''),failed?'Reset incomplete':'Reset successful',!!failed);viewResetResults.hidden=false;
+ }
+};
+const originalFilterTagList=filterTagList;filterTagList=function(){originalFilterTagList();openMultiReset.hidden=!feedList.querySelector('.eventitem');};filterTagList();
