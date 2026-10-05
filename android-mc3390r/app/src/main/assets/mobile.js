@@ -16,11 +16,27 @@
  document.getElementById('below').textContent='On-device SDK · Read-back verification';
  const info=document.createElement('p');info.className='mobileHint';info.textContent='Use the trigger to scan. Select a tag once, enter data, then write and verify.';document.querySelector('.heading').append(info);
  document.getElementById('readerPower').setAttribute('aria-label','Antenna transmit power in dBm');
- const data=document.getElementById('data');let modeQueue=Promise.resolve();
- function changeScannerMode(mode){data.dataset.scannerMode='switching';modeQueue=modeQueue.catch(()=>{}).then(async()=>{if(!NativeRfid.currentState.connected)return;const result=await NativeRfid.command('scannerMode',{mode});if(result.status!=='success'){showToast('failure',result.message||'Scanner mode change failed');return;}data.dataset.scannerMode=mode;});}
- data.addEventListener('focus',()=>changeScannerMode('barcode'));
- data.addEventListener('blur',()=>changeScannerMode('rfid'));
- window.addEventListener('readerstate',event=>{if(event.detail.connected&&document.activeElement===data&&data.dataset.scannerMode!=='barcode')changeScannerMode('barcode');});
- NativeRfid.barcode=function(value){if(window.powerUiLocked||window.writeUiLocked||document.activeElement!==data||data.dataset.scannerMode!=='barcode')return;const encoded=document.querySelector('[name=format]:checked').value==='HEX'?Array.from(value,c=>c.charCodeAt(0).toString(16).padStart(2,'0')).join('').toUpperCase():value;data.setRangeText(encoded,data.selectionStart,data.selectionEnd,'end');data.dispatchEvent(new Event('input',{bubbles:true}));};
+
+ let modeQueue=Promise.resolve(),desiredMode='rfid',appliedMode=null,lastInput=null;
+ function editable(node){return node instanceof HTMLElement&&!node.disabled&&!node.readOnly&&(node.tagName==='TEXTAREA'||node.tagName==='INPUT'&&['text','search','password','email','tel','url','number'].includes(node.type));}
+ function changeScannerMode(mode,input=null){
+  desiredMode=mode;if(input){lastInput=input;input.dataset.scannerMode=appliedMode===mode?mode:'switching';}
+  modeQueue=modeQueue.catch(()=>{}).then(async()=>{
+   if(mode!==desiredMode||!NativeRfid.currentState.connected)return;
+   if(appliedMode!==mode){const result=await NativeRfid.command('scannerMode',{mode});if(result.status!=='success'){if(lastInput)lastInput.dataset.scannerMode='unavailable';showToast('failure',result.message||'Scanner mode change failed');return;}appliedMode=mode;}
+   if(mode===desiredMode&&lastInput)lastInput.dataset.scannerMode=mode;
+  });
+ }
+ document.addEventListener('focusin',event=>{if(editable(event.target))changeScannerMode('barcode',event.target);});
+ document.addEventListener('focusout',event=>{if(editable(event.target)&&!editable(event.relatedTarget))changeScannerMode('rfid');});
+ window.addEventListener('readerstate',event=>{if(!event.detail.connected){appliedMode=null;if(lastInput)lastInput.dataset.scannerMode='unavailable';}else if(editable(document.activeElement)&&desiredMode!=='barcode')changeScannerMode('barcode',document.activeElement);else if(editable(document.activeElement)&&appliedMode===null&&document.activeElement.dataset.scannerMode!=='switching')changeScannerMode('barcode',document.activeElement);});
+ NativeRfid.barcode=function(value){
+  const input=document.activeElement;if(window.powerUiLocked||window.writeUiLocked||!editable(input)||appliedMode!=='barcode'||desiredMode!=='barcode'||input.dataset.scannerMode!=='barcode')return;
+  const hex=input.id==='data'&&document.querySelector('[name=format]:checked').value==='HEX'||input.id==='multiWriteData'&&document.querySelector('#multiWriteDialog [data-encoding=HEX]')?.getAttribute('aria-pressed')==='true';
+  const encoded=hex?Array.from(value,c=>c.charCodeAt(0).toString(16).padStart(2,'0')).join('').toUpperCase():value;
+  const start=input.selectionStart??input.value.length,end=input.selectionEnd??input.value.length;
+  if(['number','email'].includes(input.type))input.value=input.value.slice(0,start)+encoded+input.value.slice(end);else input.setRangeText(encoded,start,end,'end');
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+ };
  button.click();
 })();
