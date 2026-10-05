@@ -50,7 +50,7 @@ async function setup({ui=false,connected=false,reading=false,powerDbm=25}={}){
 
  if(connected)w.NativeRfid.state({connected:true,reading,powerDbm,minDbm:5,maxDbm:30});
 
- if(ui){w.eval(asset('app.js')+'\n'+asset('batch-write.js'));w.eval(asset('mobile.js'));}
+ if(ui){w.eval(asset('app.js')+'\n'+asset('batch-write.js')+'\n'+asset('modern.js'));w.eval(asset('mobile.js'));}
 
  await flush();
 

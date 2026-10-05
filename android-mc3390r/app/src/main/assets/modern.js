@@ -1,0 +1,11 @@
+/* Presentation only: existing commands and event handlers stay intact. */
+(function(){
+ const icons={writeTags:'M4 20l4-1 12-12-3-3L5 16l-1 4 M14 7l3 3',factoryReset:'M4 11a8 8 0 1 1 2 7 M4 4v7h7',openTagFilter:'M3 5h18l-7 8v6l-4-2v-4L3 5',clearTagList:'M4 6h16 M9 6V3h6v3 M6 6l1 15h10l1-15 M10 10v7 M14 10v7'};
+ const savedIcons=new Map();const bar=document.createElement('div');bar.className='feedActionBar';document.querySelector('.feed .panelhead').append(bar);
+ for(const [id,path]of Object.entries(icons)){const button=document.getElementById(id);if(!button)continue;const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.8');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');svg.setAttribute('class','uiIcon');const shape=document.createElementNS('http://www.w3.org/2000/svg','path');shape.setAttribute('d',path);svg.append(shape);button.prepend(svg);savedIcons.set(id,svg.cloneNode(true));bar.append(button);}
+ const previousFilter=filterTagList;filterTagList=function(){previousFilter();for(const [id,svg]of savedIcons){const button=document.getElementById(id);if(button&&!button.querySelector('.uiIcon'))button.prepend(svg.cloneNode(true));}};
+ const sidebar=document.querySelector('.readerSidebar'),existing=document.getElementById('readerControlsToggle');
+ const arrow='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>';
+ if(existing){existing.classList.add('readerControlsToggle');existing.innerHTML=arrow;}
+ else{const toggle=document.createElement('button');toggle.type='button';toggle.className='readerControlsToggle';toggle.innerHTML=arrow;sidebar.querySelector('.sidebarHeading').append(toggle);function setCollapsed(collapsed){sidebar.dataset.collapsed=String(collapsed);toggle.setAttribute('aria-expanded',String(!collapsed));toggle.setAttribute('aria-label',collapsed?'Expand reader controls':'Collapse reader controls');}setCollapsed(window.innerWidth<=760);toggle.onclick=()=>setCollapsed(sidebar.dataset.collapsed!=='true');}
+})();
