@@ -71,3 +71,24 @@
 #writeTagDialog{width:calc(100vw - 24px);max-width:650px;max-height:90vh;overflow:auto;background:#101e2e;color:#edf3ff;border:1px solid #385271;border-radius:16px;padding:16px}#writeTagDialog::backdrop{background:#020811bb}#writeTagDialog .editor{position:static}#writeTagDialog .result{margin-top:16px}
 
 .feed #eventList{max-height:none;height:auto;overflow:visible;padding-right:0}.feed .eventitem{grid-template-columns:1fr}.selectionPanel{display:none!important}#writeTagDialog .filterHeading button{display:grid;place-items:center}#writeTagDialog .tagdetails{margin-bottom:16px}
+
+#writeTagDialog{padding:0;width:calc(100vw - 24px);max-width:650px;height:90vh;max-height:90vh;overflow:hidden;box-sizing:border-box}
+#writeTagDialog[open]{display:flex;flex-direction:column}
+#writeTagDialog .modalHeader{flex:none;background:#101e2e;padding:14px 16px;border-bottom:1px solid #385271;z-index:2}
+#writeTagDialog .filterHeading{margin:0 0 12px;gap:12px;min-width:0}
+#writeTagDialog .filterHeading h2{flex:1;min-width:0;font-size:16px;overflow-wrap:anywhere;word-break:break-word;margin:0}
+#writeTagDialog .filterHeading button{flex:none;width:52px;height:52px;padding:8px;border:1px solid #385271;border-radius:12px;background:#173957}
+#writeTagDialog .filterHeading svg{width:32px;height:32px}
+#writeTagDialog .modalBody{flex:1;min-height:0;min-width:0;overflow-y:auto;overflow-x:hidden;padding:14px;overscroll-behavior:contain}
+#writeTagDialog .modalBody .panel{width:100%;min-width:0;max-width:100%;padding:16px;overflow-wrap:anywhere}
+#writeTagDialog .modalBody *{box-sizing:border-box;min-width:0;max-width:100%}
+#writeTagDialog pre{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all}
+#writeTagDialog input,#writeTagDialog textarea,#writeTagDialog select{width:100%;max-width:100%}
+#writeTagDialog .row{gap:10px}#writeTagDialog .segments{gap:8px}#writeTagDialog .datafoot{flex-wrap:wrap}
+#writeTagDialog .modalTabs{display:flex;position:relative;border:1px solid #385271;border-radius:12px;background:#081522;padding:4px;isolation:isolate}
+#writeTagDialog .tabThumb{position:absolute;top:4px;bottom:4px;left:4px;width:calc(50% - 4px);border-radius:8px;background:#087cff;transition:transform .18s ease;z-index:-1}
+#writeTagDialog[data-view=write] .tabThumb{transform:translateX(100%)}
+#writeTagDialog .modalTabs button{flex:1;background:transparent;border:0;color:#b8cce4;padding:12px 8px;border-radius:8px;font-weight:600}
+#writeTagDialog .modalTabs button[aria-selected=true]{color:white}
+#writeTagDialog[data-view=write] .tagdetails,#writeTagDialog[data-view=details] .editor,#writeTagDialog[data-view=details] .result{display:none}
+@media(prefers-reduced-motion:reduce){#writeTagDialog .tabThumb{transition:none}}

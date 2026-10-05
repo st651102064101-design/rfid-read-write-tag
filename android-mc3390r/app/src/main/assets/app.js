@@ -465,9 +465,18 @@ $('closeFactoryReset').onclick=closeFactoryDialog;$('cancelFactoryReset').onclic
 
 const writeDialog=document.createElement('dialog');writeDialog.id='writeTagDialog';writeDialog.setAttribute('aria-label','Write selected tag');
 
-const writeHeading=el('div',undefined,'filterHeading'),writeTitle=el('h2','Write tag'),writeClose=el('button');writeClose.innerHTML='<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';writeClose.type='button';writeClose.setAttribute('aria-label','Close write tag');writeHeading.append(writeTitle,writeClose);writeDialog.append(writeHeading,document.querySelector('.panel.tagdetails'),document.querySelector('.panel.editor'),document.querySelector('.panel.result'));document.body.append(writeDialog);
+const writeHeading=el('div',undefined,'filterHeading'),writeTitle=el('h2','Write tag'),writeClose=el('button');writeClose.innerHTML='<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';writeClose.type='button';writeClose.setAttribute('aria-label','Close write tag');writeHeading.append(writeTitle,writeClose);const modalTabs=el('div',undefined,'modalTabs');modalTabs.setAttribute('role','tablist');modalTabs.setAttribute('aria-label','Tag view');
+const tabThumb=el('span',undefined,'tabThumb'),detailsTab=el('button','Details'),writeTab=el('button','Write tag');
+for(const tab of [detailsTab,writeTab]){tab.type='button';tab.setAttribute('role','tab');}
+detailsTab.id='modalDetailsTab';writeTab.id='modalWriteTab';modalTabs.append(tabThumb,detailsTab,writeTab);
+const modalBody=el('div',undefined,'modalBody');modalBody.append(document.querySelector('.panel.tagdetails'),document.querySelector('.panel.editor'),document.querySelector('.panel.result'));
+const modalHeader=el('div',undefined,'modalHeader');modalHeader.append(writeHeading,modalTabs);writeDialog.append(modalHeader,modalBody);document.body.append(writeDialog);
+function setModalView(view){if(view==='details')$('data').blur();writeDialog.dataset.view=view;detailsTab.setAttribute('aria-selected',String(view==='details'));writeTab.setAttribute('aria-selected',String(view==='write'));detailsTab.tabIndex=view==='details'?0:-1;writeTab.tabIndex=view==='write'?0:-1;}
+detailsTab.onclick=()=>setModalView('details');writeTab.onclick=()=>setModalView('write');
+let tabTouchX=null;modalTabs.addEventListener('touchstart',event=>{tabTouchX=event.touches[0]?.clientX;},{passive:true});modalTabs.addEventListener('touchend',event=>{const x=event.changedTouches[0]?.clientX;if(tabTouchX!==null&&Math.abs(x-tabTouchX)>20)setModalView(x>tabTouchX?'write':'details');tabTouchX=null;},{passive:true});
+modalTabs.addEventListener('keydown',event=>{if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;event.preventDefault();const tab=event.key==='ArrowLeft'?detailsTab:writeTab;tab.click();tab.focus();});setModalView('write');
 
-function openWriteDialog(epc){writeTitle.textContent='Write - '+(epcAscii(epc)||epc);if(!writeDialog.open){if(writeDialog.showModal)writeDialog.showModal();else writeDialog.setAttribute('open','');}refreshSelectedTagDetails();NativeRfid.invalidateBanks(epc);}
+function openWriteDialog(epc){writeTitle.textContent=(epcAscii(epc)||epc);if(!writeDialog.open){if(writeDialog.showModal)writeDialog.showModal();else writeDialog.setAttribute('open','');}refreshSelectedTagDetails();NativeRfid.invalidateBanks(epc);}
 
 function closeWriteDialog(){if(busy){showToast('warning','Wait for the write result before closing');return;}document.getElementById('data').blur();if(writeDialog.close)writeDialog.close();else writeDialog.removeAttribute('open');}
 

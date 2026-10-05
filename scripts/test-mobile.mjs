@@ -881,3 +881,14 @@ test('Read more shows 10, 20, then all 25 tags with details inside the write mod
  a.doc.querySelector('.eventcard summary').click();const modal=a.doc.getElementById('writeTagDialog');assert.equal(modal.open,true);assert.ok(modal.contains(a.doc.getElementById('tagDetails')));assert.ok(modal.querySelector('svg'));
  }finally{a.close();}
 });
+
+test('modal tabs slide between details and writing while keeping the close header outside the scroller',async()=>{
+ const a=await setup({ui:true,connected:true,reading:true});try{
+ await a.scan();choose(a);const modal=a.doc.getElementById('writeTagDialog'),details=a.doc.getElementById('modalDetailsTab'),write=a.doc.getElementById('modalWriteTab');
+ assert.equal(modal.dataset.view,'write');details.click();assert.equal(modal.dataset.view,'details');assert.equal(details.getAttribute('aria-selected'),'true');
+ write.click();assert.equal(modal.dataset.view,'write');assert.equal(write.getAttribute('aria-selected'),'true');
+ assert.ok(modal.querySelector('.modalHeader [aria-label="Close write tag"] svg'));assert.equal(modal.querySelector('.modalBody').contains(modal.querySelector('.modalHeader')),false);
+ details.dispatchEvent(new a.w.KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));assert.equal(modal.dataset.view,'details');
+ const start=new a.w.Event('touchstart');start.touches=[{clientX:20}];const end=new a.w.Event('touchend');end.changedTouches=[{clientX:100}];modal.querySelector('.modalTabs').dispatchEvent(start);modal.querySelector('.modalTabs').dispatchEvent(end);assert.equal(modal.dataset.view,'write');
+ }finally{a.close();}
+});
