@@ -62,7 +62,7 @@ const post=(w,path,body)=>w.fetch(path,{method:'POST',body:JSON.stringify(body)}
 
 const result=(w,id)=>w.fetch('/api/write/result?requestId='+id).then(r=>r.json());
 
-function choose(a,target=epc){const card=a.doc.querySelector('.eventcard[data-epc="'+target+'"] > summary');assert.ok(card,'Expected detected card');card.click();}
+function choose(a,target=epc){const card=a.doc.querySelector('.eventcard[data-epc="'+target+'"] > summary');assert.ok(card,'Expected detected card');card.click();a.doc.getElementById('clearData').click();a.doc.querySelector('[name=format][value=ASCII]').checked=true;a.doc.querySelector('[name=format][value=ASCII]').dispatchEvent(new a.w.Event('change'));}
 
 function input(a,text){const node=a.doc.getElementById('data');node.value=text;node.dispatchEvent(new a.w.Event('input'));}
 
@@ -162,7 +162,7 @@ test('mobile write sends exact original target and shows verified SDK time only 
 
   const pending=a.doc.getElementById('writer').onsubmit(new a.w.Event('submit',{cancelable:true}));await flush();
 
-  const command=a.last('write');assert.equal(command.body.epc,epc);assert.equal(command.body.dataHex,'414243');assert.equal(command.body.lengthBytes,3);assert.equal(command.body.offsetBytes,0);
+  const command=a.last('write');assert.equal(command.body.epc,epc);assert.equal(command.body.dataHex,'414243'+'00'.repeat(5));assert.equal(command.body.lengthBytes,8);assert.equal(command.body.offsetBytes,0);
 
   assert.match(a.doc.getElementById('result').textContent,/Waiting for write confirmation/);assert.equal(a.doc.getElementById('result').classList.contains('success'),false);
 
@@ -460,7 +460,7 @@ test('EPC format conversion keeps HEX for embedded nonprintable data and does no
 
   input(a,'00'.repeat(12));text.checked=true;text.dispatchEvent(new a.w.Event('change'));assert.equal(hex.checked,true);assert.equal(a.doc.getElementById('data').value,'00'.repeat(12));assert.match(a.doc.getElementById('error').textContent,/no printable EPC text/);
 
-  await readBanks(a,{USER:'00'.repeat(8)});bank(a,'USER');input(a,'004142');text.checked=true;text.dispatchEvent(new a.w.Event('change'));assert.equal(hex.checked,true);assert.equal(a.doc.getElementById('data').value,'004142');assert.match(a.doc.getElementById('error').textContent,/non-printable/);
+  await readBanks(a,{USER:'00'.repeat(8)});bank(a,'USER');hex.checked=true;hex.dispatchEvent(new a.w.Event('change'));input(a,'004142');text.checked=true;text.dispatchEvent(new a.w.Event('change'));assert.equal(hex.checked,true);assert.equal(a.doc.getElementById('data').value,'004142');assert.match(a.doc.getElementById('error').textContent,/non-printable/);
 
  }finally{a.close();}
 
@@ -616,75 +616,7 @@ test('100000 rapid reports retain totals beyond the event history limit without 
 
 });
 
-test('factory reset writes 00 across every readable USER bank and continues after a skip or failure',async()=>{
 
- const a=await setup({ui:true,connected:true});try{
-
-  await a.scan([{epc,rssi:-40},{epc:secondEpc,rssi:-50},{epc:'E2801191A5030069565F9436',rssi:-55}]);
-
-  a.doc.getElementById('factoryReset').click();
-
-  assert.equal(a.doc.getElementById('factoryResetDialog').open,true);
-
-  assert.equal(a.doc.querySelectorAll('#factoryResetTargets input').length,3);assert.equal(a.doc.getElementById('confirmFactoryReset').disabled,true);
-
-  a.doc.getElementById('cancelFactoryReset').click();
-
-  assert.equal(a.doc.getElementById('factoryResetDialog').open,false);
-
-  assert.equal(a.commands.filter(c=>c.operation==='banks'||c.operation==='write').length,0);
-
-  a.doc.getElementById('factoryReset').click();
-
-  for(const box of a.doc.querySelectorAll('#factoryResetTargets input')){box.checked=true;box.dispatchEvent(new a.w.Event('change'));}
-
-  const pending=a.doc.getElementById('confirmFactoryReset').onclick();
-
-  const answers={'E2806F12000000022DF13118':{status:'success',banks:{USER:'35'.repeat(4)},readableErrors:{}},'E28069150000401ECAB4A8D5':{status:'success',banks:{},readableErrors:{USER:'Read failed: ACCESS_TAG_MEMORY_OVERRUN_ERROR'}},'E2801191A5030069565F9436':{status:'success',banks:{USER:'3535'},readableErrors:{}}};
-
-  for(let i=0;i<3;i++){
-
-   await flush();const read=a.commands.filter(c=>c.operation==='banks').at(-1);assert.ok(answers[read.body.epc]);
-
-   a.reply('banks',answers[read.body.epc]);await flush();
-
-   if(answers[read.body.epc].banks.USER){const write=a.last('write');assert.equal(write.body.memoryBank,'USER');assert.equal(write.body.offsetBytes,0);assert.equal(write.body.lengthBytes,write.body.dataHex.length/2);assert.equal(write.body.dataHex,'00'.repeat(write.body.lengthBytes));assert.equal(write.body.confirmSensitive,false);a.reply('write',read.body.epc.endsWith('9436')?{status:'unknown',verified:false,message:'Partial write: 2 of 2 bytes'}:{status:'success',verified:true,durationMs:30});await flush();}
-
-  }
-
-  await pending;
-
-  assert.equal(a.commands.filter(c=>c.operation==='write').length,2);
-
-  assert.match(a.doc.getElementById('factoryResetStatus').textContent,/Finished · 1 reset · 1 skipped · 1 failed/);
-
-  assert.match(a.doc.getElementById('factoryResetLog').textContent,/skipped, no readable USER memory/);
-
-  assert.equal(a.doc.getElementById('factoryReset').disabled,false);
-
- }finally{a.close();}
-
-});
-
-test('factory reset stays closed while the trigger is held and reports no tags without sending commands',async()=>{
-
- const a=await setup({ui:true,connected:true,reading:true});try{
-
-  await a.scan();a.doc.getElementById('factoryReset').click();
-
-  assert.equal(a.doc.getElementById('confirmFactoryReset').disabled,true);
-
-  assert.match(a.doc.getElementById('factoryResetStatus').textContent,/Release the trigger/);
-
-  a.doc.getElementById('confirmFactoryReset').onclick();await flush();
-
-  assert.equal(a.commands.filter(c=>c.operation==='banks'||c.operation==='write').length,0);
-
-  a.w.NativeRfid.back();assert.equal(a.doc.getElementById('factoryResetDialog').open,false);
-
- }finally{a.close();}
-
-});
 
 test('rapid UI updates reuse tag cards and lazily build details with exact read counts',async()=>{
 
@@ -708,35 +640,6 @@ test('rapid UI updates reuse tag cards and lazily build details with exact read 
 
 });
 
-test('reset sends commands only for checked tags and closes with verified success alert',async()=>{
-
- const a=await setup({ui:true,connected:true});try{
-
-  await a.scan([{epc,seenCount:10},{epc:secondEpc,seenCount:1}]);
-
-  a.doc.getElementById('factoryReset').click();
-
-  const box=[...a.doc.querySelectorAll('#factoryResetTargets input')].find(x=>x.value===secondEpc);
-
-  box.checked=true;box.dispatchEvent(new a.w.Event('change'));
-
-  const pending=a.doc.getElementById('confirmFactoryReset').onclick();await flush();
-
-  assert.equal(a.last('banks').body.epc,secondEpc);
-
-  a.reply('banks',{status:'success',banks:{USER:'3535'}});await flush();
-
-  assert.equal(a.last('write').body.epc,secondEpc);a.reply('write',{status:'success',verified:true});await pending;
-
-  assert.equal(a.commands.filter(c=>c.operation==='write').length,1);
-
-  assert.equal(a.doc.getElementById('factoryResetDialog').open,false);
-
-  assert.match(a.doc.getElementById('toast').textContent,/Reset successful/);
-
- }finally{a.close();}
-
-});
 
 test('tag list ranks the most repeatedly read tag above a more recent tag',async()=>{
 
@@ -810,19 +713,19 @@ test('failed barcode mode switches do not accept scans or report success',async(
 
 });
 
-test('Filter and Factory reset stay hidden until tags are detected, independent of filter matches',async()=>{
+test('Filter stays hidden until tags are detected, independent of filter matches',async()=>{
 
  const a=await setup({ui:true,connected:true,reading:true});try{
 
-  for(const id of ['openTagFilter','factoryReset'])assert.equal(a.doc.getElementById(id).hidden,true);
+  for(const id of ['openTagFilter'])assert.equal(a.doc.getElementById(id).hidden,true);
 
   await a.scan();
 
-  for(const id of ['openTagFilter','factoryReset'])assert.equal(a.doc.getElementById(id).hidden,false);
+  for(const id of ['openTagFilter'])assert.equal(a.doc.getElementById(id).hidden,false);
 
   const search=a.doc.getElementById('tagSearch');search.value='NO_MATCH';search.dispatchEvent(new a.w.Event('input'));
 
-  for(const id of ['openTagFilter','factoryReset'])assert.equal(a.doc.getElementById(id).hidden,false);
+  for(const id of ['openTagFilter'])assert.equal(a.doc.getElementById(id).hidden,false);
 
  }finally{a.close();}
 
@@ -915,3 +818,7 @@ test('failed or unverified writes unlock controls without showing a success badg
  }finally{a.close();}
  }
 });
+
+test('range presets show capability-based dBm and use the confirmed power command',async()=>{const a=await setup({ui:true,connected:true});try{const buttons=[...a.doc.querySelectorAll('.powerPresets button')];assert.deepEqual(buttons.map(x=>x.dataset.dbm),['5','18','30']);assert.match(buttons[1].textContent,/Medium18 dBm/);buttons[0].click();await flush();assert.equal(a.last('power').body.powerDbm,5);assert.equal(a.doc.getElementById('powerSettingDialog').open,true);a.w.NativeRfid.state({powerDbm:5});a.reply('power',{status:'success',verified:true,powerDbm:5});await a.delay(500);assert.equal(a.doc.getElementById('powerSettingDialog').open,false);}finally{a.close();}});
+test('existing USER text loads once, Clear keeps edits and a shorter write clears all old tail bytes',async()=>{const a=await setup({ui:true,connected:true});try{await a.scan();choose(a);bank(a,'USER');await readBanks(a,{USER:'4F4C44444154410000'});assert.equal(a.doc.getElementById('data').value,'OLDDATA');a.doc.getElementById('clearData').click();assert.equal(a.doc.getElementById('data').value,'');a.w.loadExistingData();assert.equal(a.doc.getElementById('data').value,'');assert.equal(a.w.payload().dataHex,'00'.repeat(9));input(a,'NEW');const body=a.w.payload();assert.equal(body.dataHex,'4E4557'+'00'.repeat(6));assert.equal(body.lengthBytes,9);assert.equal(body.offsetBytes,0);}finally{a.close();}});
+test('selected-tag reset reads capacity and verifies complete USER zeroing',async()=>{const a=await setup({ui:true,connected:true});try{await a.scan();choose(a);const pending=a.doc.getElementById('resetSelectedTag').onclick();await flush();a.reply('banks',{status:'success',banks:{USER:'41424344'}});await flush();assert.equal(a.last('write').body.dataHex,'00000000');a.reply('write',{status:'success',verified:true});await pending;assert.match(a.doc.getElementById('writeSuccessBadge').textContent,/Reset successful/);}finally{a.close();}});
