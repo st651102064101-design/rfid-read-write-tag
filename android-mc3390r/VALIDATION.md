@@ -125,3 +125,19 @@ All Java tests pass, including the one-million-report pipeline test, 256-byte wr
 - Focusing Data queues the Zebra SDK BARCODE_MODE trigger switch and stops RFID inventory; leaving Data queues RFID_MODE. RFID trigger callbacks are ignored in barcode mode.
 - App-scoped DataWedge profile enables barcode input and broadcast output with keystroke output disabled. Barcode deliveries are accepted only for the focused Data field after a successful switch; HEX inputs encode the scanned text as bytes.
 - Interface tests 41/41 and Java tests 28/28 pass; the APK builds successfully. Initial connection attempts were blocked by charging. After installing/restarting 1.0.12 the real SDK connected successfully: Data focus switched to barcode in 560.6 ms, blur restored RFID in 215 ms, and DataWedge reported successful enable/disable. Actual barcode decoding from a physical label still needs a user trigger scan.
+
+
+### 1.0.14: held trigger and per-tag write modal
+
+- Physical trigger press/release is latched immediately, including events arriving during SDK access. Delayed queued handlers use the latest physical state; memory reads are blocked while held even if an inventory-stop event arrives. An unexpected stop while the trigger remains held requests inventory restart. Mode switches, pause/dispose and release inhibit restart.
+- Power/access completion resumes continuous inventory only if it is still requested, or physical trigger inventory only while the trigger remains held.
+- Clicking a tag opens a write modal for that EPC without page scrolling and invalidates old bank observations. Native writes still read the exact selected EPC/range before writing and verify afterward; history is not a reachability guarantee.
+- Multi-tag writing remains unexposed: current hardware evidence establishes per-EPC writes, not reliable parallel writes across an arbitrary retained history list. The user-requested per-tag modal is the fallback.
+- Interface tests 44/44 and Java tests 31/31 pass. Physical held-trigger validation is recorded separately after device testing; unit tests alone do not establish RF operation.
+
+
+### 1.0.15: repeated-trigger regression
+
+- User confirmed 1.0.14 continued reading during the first hold, but reported the next trigger press did not read. Device logs showed automatic access-sequence work beginning immediately after release.
+- Memory reads now require an open write/info/details dialog. Scan release and the 1500 ms timer cannot read memory for an automatically selected historical tag while simply scanning.
+- Added regression with five press/release cycles verifying zero bank commands without a dialog. Interface 45/45 plus Java 31/31 tests pass; final APK assembled. Awaiting repeated physical-trigger confirmation on this version.

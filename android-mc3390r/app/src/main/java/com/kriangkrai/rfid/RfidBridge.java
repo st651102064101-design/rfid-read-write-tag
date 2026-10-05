@@ -62,6 +62,7 @@ public final class RfidBridge {
     private volatile boolean inventoryCommandPending;
     private boolean continuousReading;
     private boolean barcodeMode;
+    private final TriggerLatch triggerLatch = new TriggerLatch();
     private int[] powerValues;
     private volatile Double powerDbm;
     private Double lastUserWritePower;
@@ -111,6 +112,7 @@ public final class RfidBridge {
                         String mode = payload.getString("mode");
                         if (!mode.equals("barcode") && !mode.equals("rfid")) throw new IllegalArgumentException("Invalid scanner mode");
                         RFIDReader modeReader = requireReader();
+                        barcodeMode = mode.equals("barcode");
                         if (reading) setReading(false);
                         continuousReading = false;
                         modeReader.Config.setTriggerMode(mode.equals("barcode") ? ENUM_TRIGGER_MODE.BARCODE_MODE : ENUM_TRIGGER_MODE.RFID_MODE, true);
@@ -326,7 +328,7 @@ public final class RfidBridge {
             if (Math.abs(powerDbm - dbm) > 0.00001) throw new IllegalStateException("Reader did not confirm the selected transmit power");
             result = success().put("powerDbm", powerDbm);
         } finally {
-            try { if (resume && foreground) setReading(true); }
+            try { if (((resume && continuousReading) || triggerLatch.wantsInventory(barcodeMode, foreground, disposed)) && foreground) setReading(true); }
             finally { accessing = false; }
         }
         message = "Connected";
@@ -336,7 +338,7 @@ public final class RfidBridge {
     private JSONObject banks(JSONObject payload) throws Exception {
         RFIDReader rd = requireReader();
         // A UI timer must never interrupt continuous trigger inventory.
-        if (reading || continuousReading) throw new IllegalStateException("Release the trigger before reading tag memory");
+        if (triggerLatch.held() || reading || continuousReading) throw new IllegalStateException("Release the trigger before reading tag memory");
         bankRequests.incrementAndGet();
         String epc = WritePolicy.hex(payload.getString("epc"), false);
         if (epc.length() % 4 != 0 || epc.length() > 124) throw new IllegalArgumentException("Invalid Gen2 EPC");
@@ -363,7 +365,7 @@ public final class RfidBridge {
                 } catch (Exception error) { errors.put(bank, explain(error)); }
             }
         } finally {
-            try { scanProfile.restore(rd); if (resume && foreground) setReading(true); }
+            try { scanProfile.restore(rd); if (((resume && continuousReading) || triggerLatch.wantsInventory(barcodeMode, foreground, disposed)) && foreground) setReading(true); }
             finally { accessing = false; }
         }
         return success().put("epc", epc).put("banks", values).put("readableErrors", errors);
@@ -583,7 +585,7 @@ public final class RfidBridge {
             }
             try {
                 scanProfile.restore(rd);
-                if (resume && foreground) setReading(true);
+                if (((resume && continuousReading) || triggerLatch.wantsInventory(barcodeMode, foreground, disposed)) && foreground) setReading(true);
             } catch (Exception error) {
                 // Preserve the write outcome while honestly reporting the failed inventory restore.
                 message = "Inventory could not resume: " + explain(error);
@@ -629,7 +631,7 @@ public final class RfidBridge {
         JSONObject state = new JSONObject();
         try {
             boolean connected = reader != null && reader.isConnected() && initialized && !connectionLost;
-            state.put("connected", connected).put("reading", connected && readingKnown && reading)
+            state.put("triggerHeld", triggerLatch.held()).put("connected", connected).put("reading", connected && readingKnown && reading)
                     .put("powerDbm", connected && powerDbm != null ? powerDbm : JSONObject.NULL)
                     .put("message", message);
             int[] levels = powerValues;
@@ -671,6 +673,7 @@ public final class RfidBridge {
         if (disposed) return;
         executor.execute(() -> {
             continuousReading = false;
+            triggerLatch.clear();
             try { if (reader != null && reader.isConnected()) setReading(false); }
             catch (Exception error) { message = explain(error); }
             emitState();
@@ -688,6 +691,7 @@ public final class RfidBridge {
         executor.shutdown();
     }
     private void releaseReader() {
+        triggerLatch.clear();
         inventoryBatch.clear();
         beepEpoch.incrementAndGet();
         RFIDReader rd = reader;
@@ -834,17 +838,27 @@ public final class RfidBridge {
                     inventoryMonitor.notifyAll();
                 }
                 emitState();
+                if (type == STATUS_EVENT_TYPE.INVENTORY_STOP_EVENT && !inventoryCommandPending && !accessing
+                        && triggerLatch.wantsInventory(barcodeMode, foreground, disposed)) {
+                    executor.execute(() -> {
+                        if (accessing || !triggerLatch.wantsInventory(barcodeMode, foreground, disposed)) return;
+                        try { setReading(true); } catch (Exception error) { message = explain(error); }
+                        emitState();
+                    });
+                }
             } else if (type == STATUS_EVENT_TYPE.DISCONNECTION_EVENT) {
                 beepEpoch.incrementAndGet();
                 connectionLost = true;
                 synchronized (inventoryMonitor) { reading = false; readingKnown = false; inventoryMonitor.notifyAll(); }
                 message = "Reader disconnected";
                 emitState();
-            } else if (type == STATUS_EVENT_TYPE.HANDHELD_TRIGGER_EVENT && !accessing && foreground) {
+            } else if (type == STATUS_EVENT_TYPE.HANDHELD_TRIGGER_EVENT && foreground) {
                 HANDHELD_TRIGGER_EVENT_TYPE trigger = event.StatusEventData.HandheldTriggerEventData.getHandheldEvent();
+                triggerLatch.event(trigger == HANDHELD_TRIGGER_EVENT_TYPE.HANDHELD_TRIGGER_PRESSED);
+                emitState();
                 executor.execute(() -> {
                     if (barcodeMode || continuousReading || accessing || !foreground || disposed) return;
-                    try { setReading(trigger == HANDHELD_TRIGGER_EVENT_TYPE.HANDHELD_TRIGGER_PRESSED); }
+                    try { setReading(triggerLatch.held()); }
                     catch (Exception error) { message = explain(error); }
                     emitState();
                 });

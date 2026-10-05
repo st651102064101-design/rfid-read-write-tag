@@ -47,3 +47,5 @@
 .readerSidebar .powerControl{grid-column:1/-1}
 
 #factoryResetTargets{display:grid;gap:12px;max-height:40vh;overflow:auto;margin:16px 0}#factoryResetTargets label{display:flex;align-items:center;gap:12px;overflow-wrap:anywhere}#factoryResetTargets input{width:20px;height:20px;flex-shrink:0}
+
+#writeTagDialog{width:calc(100vw - 24px);max-width:650px;max-height:90vh;overflow:auto;background:#101e2e;color:#edf3ff;border:1px solid #385271;border-radius:16px;padding:16px}#writeTagDialog::backdrop{background:#020811bb}#writeTagDialog .editor{position:static}#writeTagDialog .result{margin-top:16px}

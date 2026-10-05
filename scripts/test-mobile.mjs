@@ -453,3 +453,27 @@ test('Filter and Factory reset stay hidden until tags are detected, independent 
   for(const id of ['openTagFilter','factoryReset'])assert.equal(a.doc.getElementById(id).hidden,false);
  }finally{a.close();}
 });
+
+test('held trigger prevents memory timers even if SDK inventory state briefly stops',async()=>{
+ const a=await setup({ui:true,connected:true,reading:true});try{
+  await a.scan();choose(a);a.w.NativeRfid.state({reading:false,triggerHeld:true});await a.tick(1500);
+  assert.equal(a.commands.filter(c=>c.operation==='banks').length,0);
+  a.w.NativeRfid.state({triggerHeld:false,reading:false});await flush();assert.equal(a.commands.filter(c=>c.operation==='banks').length,1);
+ }finally{a.close();}
+});
+test('clicking a tag opens its write form in a modal and invalidates cached memory',async()=>{
+ const a=await setup({ui:true,connected:true,reading:true});try{
+  await a.scan();choose(a);const modal=a.doc.getElementById('writeTagDialog');
+  assert.equal(modal.open,true);assert.ok(modal.contains(a.doc.getElementById('writer')));
+  assert.equal(a.doc.getElementById('epc').value,epc);
+  modal.querySelector('[aria-label="Close write tag"]').click();assert.equal(modal.open,false);
+ }finally{a.close();}
+});
+
+test('repeated scan releases never queue automatic memory reads unless a tag dialog is open',async()=>{
+ const a=await setup({ui:true,connected:true,reading:true});try{
+  await a.scan();
+  for(let i=0;i<5;i++){a.w.NativeRfid.state({reading:false,triggerHeld:false});await a.tick(1500);a.w.NativeRfid.state({reading:true,triggerHeld:true});await flush();}
+  assert.equal(a.commands.filter(c=>c.operation==='banks').length,0);
+ }finally{a.close();}
+});
