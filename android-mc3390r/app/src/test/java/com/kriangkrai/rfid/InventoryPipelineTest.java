@@ -45,6 +45,14 @@ public class InventoryPipelineTest {
         assertEquals("E2801234",first.epc);assertEquals(2,first.seenCount);assertEquals(-30,first.rssi);assertEquals(100,first.receivedAt);
         assertEquals(5,b.take().get(0).seenCount);assertEquals(7,b.counters()[1]);
     }
+    @Test public void tagsSharingAnEpcStaySeparateByTid() {
+        InventoryBatch b=new InventoryBatch();String zero="000000000000000000000000";
+        assertTrue(b.add(zero,"e2801191200063b7d1710346",-40,1,0,0,2,1));assertTrue(b.add(zero,"E280689420004026CE01B477",-50,1,0,0,3,2));
+        assertTrue(b.add(zero,"E2801191200063B7D1710346",-41,1,0,0,1,3));assertTrue(b.add(zero,null,-60,1,0,0,1,4));assertTrue(b.add(zero,"not-hex",-60,1,0,0,1,5));
+        List<InventoryBatch.Report> reports=b.take();assertEquals(3,reports.size());
+        assertEquals("E2801191200063B7D1710346",reports.get(0).tid);assertEquals(3,reports.get(0).seenCount);
+        assertEquals("E280689420004026CE01B477",reports.get(1).tid);assertNull(reports.get(2).tid);assertEquals(2,reports.get(2).seenCount);
+    }
     @Test public void invalidDataAndCapacityOverflowAreExplicitNotCountedAsSuccessfulDelivery() {
         InventoryBatch b=new InventoryBatch();assertFalse(b.add("BAD!",0,0,0,0,1,0));assertEquals(0,b.counters()[0]);assertEquals(1,b.counters()[2]);
         for(int i=0;i<InventoryBatch.MAX_PENDING_TAGS;i++)assertTrue(b.add(String.format("%08X",i),0,0,0,0,1,0));

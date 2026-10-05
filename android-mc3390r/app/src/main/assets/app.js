@@ -1,4 +1,5 @@
 const $=id=>document.getElementById(id);let endpoint='',busy=false;const tagChoices=new Map();const format=()=>document.querySelector('[name=format]:checked').value;
+function setButtonLabel(button,text){if(!button)return;let span=[...button.children].find(el=>el.classList.contains('btnLabel'));if(!span){span=document.createElement('span');span.className='btnLabel';button.append(span);}span.textContent=text;[...button.childNodes].forEach(node=>{if(node.nodeType===3)node.textContent='';else if(node.nodeType===1&&node!==span&&node.tagName==='SPAN'&&!node.classList.contains('btnLabel')&&!node.querySelector('svg'))node.remove();});}
 
 function decodeBytes(raw,encoding){if(encoding==='ASCII'){if(/[^\x00-\x7f]/.test(raw))throw Error('ASCII supports characters 0–127 only. Use HEX for other bytes');return Array.from(raw,c=>c.charCodeAt(0));}const hex=raw.replace(/\s/g,'');if(!/^[0-9a-f]*$/i.test(hex)||hex.length%2)throw Error('HEX must contain complete byte pairs using 0–9 and A–F, e.g. 48 45 4C 4C 4F');return (hex.match(/../g)||[]).map(x=>parseInt(x,16));}
 
@@ -31,7 +32,7 @@ function actionableWriteMessage(message){const detail=String(message||'Reader or
 
 function writeFailureMessage(data,body){const detail=actionableWriteMessage(data?.message);return `${body.memoryBank} · ${body.lengthBytes} bytes · ${detail}`;}
 
-$('writer').onsubmit=async e=>{e.preventDefault();if(busy||$('write').disabled)return;let operationStarted=null,readerDurationMs=null;try{if(!endpoint)throw Error('Tag writing is disabled');const body=payload();operationStarted=performance.now();busy=true;setWriteUiLocked(true);update();$('write').textContent='Sending command…';result('','Waiting for write confirmation','Do not submit again while waiting');const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(320000),credentials:'omit',redirect:'error'});if(!response.ok)throw Error((await response.json()).error||('HTTP '+response.status));let data=await response.json();const waitStarted=Date.now();while(data.status==="queued"||data.status==="running"){if(Date.now()-waitStarted>300000){data.status="unknown";break;}await new Promise(resolve=>setTimeout(resolve,600));const reply=await fetch("/api/write/result?requestId="+encodeURIComponent(body.requestId),{signal:AbortSignal.timeout(8000)});if(!reply.ok)throw Error("Unable to retrieve the write result");data=await reply.json();}if(data.requestId!==body.requestId||data.epc?.toUpperCase()!==body.epc)throw Error('Response does not match the request or target EPC');readerDurationMs=Number.isFinite(data.durationMs)&&data.durationMs>=0?Math.round(data.durationMs):null;if(data.status==='success'&&data.verified===true){const message=`${body.memoryBank} · ${body.lengthBytes} bytes · Read-back verified · ${data.newEpc||body.epc}${data.resumeWarning?" · "+data.resumeWarning:""}`;result('success','Write successful',message);pendingWriteBadge=message;if(body.memoryBank==='EPC'&&data.newEpc)selectWrittenEpc(data.newEpc);}else if(data.status==='failed'){const message=actionableWriteMessage(data.message||'The reader reported a write failure');result('failure','Write failed',message);showToast('failure','Write failed · '+message);}else{const message=writeFailureMessage(data,body);result('','Write could not be confirmed',message);showToast('warning','Write could not be confirmed · '+message);}}catch(e){$('error').textContent=e.message;if(busy){result('failure','Result could not be confirmed','Check the reader and tag before retrying: '+e.message);showToast('failure','Result could not be confirmed · '+e.message);}}finally{if(operationStarted!==null){const timing=el('div',undefined,'writeTiming');if(readerDurationMs!==null)timing.append(el('strong','Reader operation: '+readerDurationMs+' ms'));timing.append(el('span','Total elapsed: '+Math.max(0,Math.round(performance.now()-operationStarted))+' ms'));$('result').append(timing);const details=$('result').querySelector('.resultMore');details?.append(el('small','Reader operation includes preparation, writing, read-back verification and restoring the read mode. Total elapsed also includes queueing and result polling.'));}busy=false;setWriteUiLocked(false);if(pendingWriteBadge){showWriteBadge(pendingWriteBadge);pendingWriteBadge='';}$('write').innerHTML=endpoint?'<span>✎</span> Write tag':'<span>✎</span> Waiting for connection';update();}};
+$('writer').onsubmit=async e=>{e.preventDefault();if(busy||$('write').disabled)return;let operationStarted=null,readerDurationMs=null;try{if(!endpoint)throw Error('Tag writing is disabled');const body=payload();operationStarted=performance.now();busy=true;setWriteUiLocked(true);update();setButtonLabel($('write'),'Sending command…');result('','Waiting for write confirmation','Do not submit again while waiting');const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(320000),credentials:'omit',redirect:'error'});if(!response.ok)throw Error((await response.json()).error||('HTTP '+response.status));let data=await response.json();const waitStarted=Date.now();while(data.status==="queued"||data.status==="running"){if(Date.now()-waitStarted>300000){data.status="unknown";break;}await new Promise(resolve=>setTimeout(resolve,50));const reply=await fetch("/api/write/result?requestId="+encodeURIComponent(body.requestId),{signal:AbortSignal.timeout(8000)});if(!reply.ok)throw Error("Unable to retrieve the write result");data=await reply.json();}if(data.requestId!==body.requestId||data.epc?.toUpperCase()!==body.epc)throw Error('Response does not match the request or target EPC');readerDurationMs=Number.isFinite(data.durationMs)&&data.durationMs>=0?Math.round(data.durationMs):null;if(data.status==='success'&&data.verified===true){const message=`${body.memoryBank} · ${body.lengthBytes} bytes · Read-back verified · ${data.newEpc||body.epc}${data.resumeWarning?" · "+data.resumeWarning:""}`;result('success','Write successful',message);pendingWriteBadge=message;if(body.memoryBank==='EPC'&&data.newEpc)selectWrittenEpc(data.newEpc);}else if(data.status==='failed'){const message=actionableWriteMessage(data.message||'The reader reported a write failure');result('failure','Write failed',message);showToast('failure','Write failed · '+message);}else{const message=writeFailureMessage(data,body);result('','Write could not be confirmed',message);showToast('warning','Write could not be confirmed · '+message);}}catch(e){$('error').textContent=e.message;if(busy){result('failure','Result could not be confirmed','Check the reader and tag before retrying: '+e.message);showToast('failure','Result could not be confirmed · '+e.message);}}finally{if(operationStarted!==null){const timing=el('div',undefined,'writeTiming');if(readerDurationMs!==null)timing.append(el('strong','Reader operation: '+readerDurationMs+' ms'));timing.append(el('span','Total elapsed: '+Math.max(0,Math.round(performance.now()-operationStarted))+' ms'));$('result').append(timing);const details=$('result').querySelector('.resultMore');details?.append(el('small','Reader operation includes preparation, writing, read-back verification and restoring the read mode. Total elapsed also includes queueing and result polling.'));}busy=false;setWriteUiLocked(false);if(pendingWriteBadge){showWriteBadge(pendingWriteBadge);pendingWriteBadge='';}setButtonLabel($('write'),endpoint?'Write tag':'Waiting for connection');update();}};
 
 const dataField=$('data');let composingData=false;dataField.addEventListener('compositionstart',()=>{composingData=true;});dataField.addEventListener('compositionend',()=>{composingData=false;restrictHexInput();});function restrictHexInput(){if(composingData)return;if(format()==='HEX'){const raw=dataField.value,start=dataField.selectionStart,end=dataField.selectionEnd,clean=value=>value.replace(/[^0-9a-f\s]/gi,'').toUpperCase();dataField.value=clean(raw);dataField.setSelectionRange(clean(raw.slice(0,start)).length,clean(raw.slice(0,end)).length);}update();}dataField.addEventListener('beforeinput',event=>{if(format()==='HEX'&&!event.isComposing&&event.data&&/[^0-9a-f\s]/i.test(event.data))event.preventDefault();});dataField.addEventListener('input',()=>{editorDirty=true;restrictHexInput();});$('offset').addEventListener('input',update);$('accessPassword').addEventListener('input',update);$('confirmSensitive').addEventListener('change',update);document.querySelectorAll('[name=format]').forEach(el=>el.addEventListener('change',changeFormat));update();
 
@@ -41,13 +42,13 @@ const feedList=document.getElementById('eventList');
 
 const LIVE_TAG_TTL_MS=5000;
 
-let olderCursor=null,onOlderPage=false,feedLoading=false,liveBusy=false,feedSignature='',latestId=0,visibleEvents=[],pendingEvents=0,selectedEpc='',selectionInitialized=false;
+let olderCursor=null,onOlderPage=false,feedLoading=false,liveBusy=false,feedSignature='',latestId=0,visibleEvents=[],pendingEvents=0,selectedEpc='',selectedUid='',selectionInitialized=false;
 
-let tagOptionEvents=new Set(),tagOptionsDirty=false;
+let tagOptionEvents=new Set(),tagOptionsDirty=false;const tagCards=new Map();
 
 function rememberTags(events){
 
- for(const event of events){const eventKey=String(event.id??event.receivedAt);if(tagOptionEvents.has(eventKey))continue;tagOptionEvents.add(eventKey);const epcs=findEpcs(event.payload);for(const epc of epcs){const choice=tagChoices.get(epc)||{epc,count:0,event,lastAt:event.receivedAt};choice.count=eventReadCount(event,epc,choice.count);if(!choice.lastAt||Date.parse(event.receivedAt)>=Date.parse(choice.lastAt)){choice.event=event;choice.lastAt=event.receivedAt;}delete choice.pendingRead;tagChoices.set(epc,choice);}}
+ for(const event of events){const eventKey=String(event.id??event.receivedAt);if(tagOptionEvents.has(eventKey))continue;tagOptionEvents.add(eventKey);const epcs=findEpcs(event.payload);for(const epc of epcs){const choice=tagChoices.get(epc)||{epc,count:0,event,lastAt:event.receivedAt};choice.count=eventReadCount(event,epc,choice.count);if(!choice.lastAt||Date.parse(event.receivedAt)>=Date.parse(choice.lastAt)){choice.event=event;choice.lastAt=event.receivedAt;}delete choice.pendingRead;tagChoices.set(epc,choice);}applyTagEvent(tagCards,event);}
 
  while(tagOptionEvents.size>2000)tagOptionEvents.delete(tagOptionEvents.values().next().value);
 
@@ -67,7 +68,7 @@ function updateTagOptions(force=false){
 
 }
 
-function syncTagSelectionButtons(){if($('goWrite'))$('goWrite').disabled=!selectedEpc;for(const button of document.querySelectorAll('.chooseTag[data-epc]')){const selected=button.dataset.epc===selectedEpc;button.classList.toggle('selected',selected);button.closest('.eventitem')?.classList.toggle('isSelected',selected);const summary=button.closest('.eventitem')?.querySelector('.eventcard>summary');summary?.setAttribute('aria-pressed',String(selected));button.setAttribute('aria-pressed',String(selected));button.textContent=selected?'✓ Selected. Click to deselect':'Select this tag';button.setAttribute('aria-label',selected?'Deselect EPC '+button.dataset.epc:'Select EPC '+button.dataset.epc+' in the write form');}}
+function syncTagSelectionButtons(){if($('goWrite'))$('goWrite').disabled=!selectedEpc;for(const button of document.querySelectorAll('.chooseTag[data-epc]')){const card=button.closest('.eventitem')?._item,selected=selectedUid&&card&&card.epc===selectedEpc?card.uid===selectedUid:button.dataset.epc===selectedEpc;button.classList.toggle('selected',selected);button.closest('.eventitem')?.classList.toggle('isSelected',selected);const summary=button.closest('.eventitem')?.querySelector('.eventcard>summary');summary?.setAttribute('aria-pressed',String(selected));button.setAttribute('aria-pressed',String(selected));button.textContent=selected?'✓ Selected. Click to deselect':'Select this tag';button.setAttribute('aria-label',selected?'Deselect EPC '+button.dataset.epc:'Select EPC '+button.dataset.epc+' in the write form');}}
 
 function selectWrittenEpc(value){const epc=String(value||'').trim().toUpperCase();if(!/^(?:[0-9A-F]{2})+$/.test(epc))return;const current=tagChoices.get(epc);if(!current){tagChoices.set(epc,{epc,count:0,lastAt:new Date().toISOString(),pendingRead:true,event:{id:'write-result-'+Date.now(),receivedAt:new Date().toISOString(),payload:[{type:'INVENTORY',idHex:epc}]}});}selectedEpc=epc;selectionInitialized=true;updateTagOptions(true);const select=$('epc');select.value=epc;updateTagDetails(tagChoices.get(epc));update();syncTagSelectionButtons();}
 
@@ -133,37 +134,74 @@ function isRecent(event){return !!event;}
 
 function eventReadCount(event,epc,fallback=0){const records=event.payload.filter(record=>record.data?.idHex===epc);const total=records.reduce((max,r)=>Math.max(max,Number(r.data.totalReads)||0),0);return total||fallback+(records.some(r=>r.type!=='MEMORY_READ')?1:0);}
 
+// One card per physical tag: EPC plus factory TID when the reader reported it, else the EPC alone.
+function tagIdsIn(payload){
+ const found=new Map();
+ for(const record of Array.isArray(payload)?payload:[payload]){const data=record?.data;if(!data||typeof data.idHex!=='string'||!/^(?:[0-9a-f]{2})+$/i.test(data.idHex))continue;const epc=data.idHex.toUpperCase(),tid=typeof data.tidHex==='string'?data.tidHex.toUpperCase():'',uid=typeof data.uid==='string'&&data.uid?data.uid.toUpperCase():tid?epc+'/'+tid:epc,memory=record.type==='MEMORY_READ';const old=found.get(uid);if(old)old.memory=old.memory&&memory;else found.set(uid,{uid,epc,tid,memory});}
+ if(!found.size)for(const epc of findEpcs(payload))found.set(epc,{uid:epc,epc,tid:'',memory:false});
+ return [...found.values()];
+}
+function uidReadCount(event,uid,fallback=0){const records=event.payload.filter(record=>record.data&&String(record.data.uid||record.data.idHex||'').toUpperCase()===uid);const total=records.reduce((max,r)=>Math.max(max,Number(r.data.totalReads)||0),0);return total||fallback+(records.some(r=>r.type!=='MEMORY_READ')?1:0);}
+function applyTagEvent(map,event){
+ for(const id of tagIdsIn(event.payload)){
+  if(id.memory){let known=false;for(const item of map.values())if(item.epc===id.epc){item.event=event;known=true;}if(!known)map.set(id.uid,{uid:id.uid,epc:id.epc,tid:'',count:uidReadCount(event,id.uid,0),event,lastAt:event.receivedAt});continue;}
+  const item=map.get(id.uid)||{uid:id.uid,epc:id.epc,tid:id.tid,count:0};item.event=event;item.lastAt=event.receivedAt;item.count=uidReadCount(event,id.uid,item.count);map.set(id.uid,item);
+ }
+ dropTidlessDuplicates(map);
+}
+function dropTidlessDuplicates(map){const withTid=new Set();for(const item of map.values())if(item.tid)withTid.add(item.epc);for(const [uid,item] of map)if(!item.tid&&withTid.has(item.epc))map.delete(uid);}
+function sharedEpcCount(epc){let count=0;for(const item of tagCards.values())if(item.epc===epc)count++;return count;}
+function cardRssi(item){const record=item.event?.payload?.find(r=>r.data&&String(r.data.uid||r.data.idHex||'').toUpperCase()===item.uid&&Number.isFinite(r.data.peakRssi));return record?record.data.peakRssi:null;}
+const TAG_DISPLAY_DEFAULTS={name:true,epc:true,tid:true,rssi:false,time:true};
+let tagDisplay={...TAG_DISPLAY_DEFAULTS};try{tagDisplay={...TAG_DISPLAY_DEFAULTS,...JSON.parse(localStorage.getItem('tagDisplay')||'{}')};}catch(_error){}
+function paintTagCard(row,item,shared){
+ const summary=row.querySelector('summary'),ascii=epcAscii(item.epc),show=tagDisplay;
+ const title=show.name&&ascii?ascii:show.epc?item.epc:show.tid&&item.tid?item.tid:(ascii||item.epc);
+ summary.querySelector('.tagReadCount').textContent=String(item.count);
+ summary.querySelector('.tagReadCount').setAttribute('aria-label','Read '+item.count+' times');
+ summary.querySelector('.tagCardName').textContent=title;
+ const lines=[];if(show.epc&&title!==item.epc)lines.push(['EPC',item.epc]);if(show.tid&&item.tid&&title!==item.tid)lines.push(['TID',item.tid]);if(show.rssi){const rssi=cardRssi(item);if(rssi!==null)lines.push(['RSSI',rssi+' dBm']);}
+ const meta=summary.querySelector('.tagCardMeta');meta.replaceChildren(...lines.map(([label,value])=>{const line=el('span',undefined,'tagMetaLine');line.append(el('b',label),document.createTextNode(' '+value));return line;}));meta.hidden=!lines.length;
+ const twin=summary.querySelector('.tagSameEpc');twin.hidden=shared<2;twin.textContent='Same EPC × '+shared;
+ const time=summary.querySelector('.tagCardTime');time.textContent=new Date(item.event.receivedAt).toLocaleString('en-GB');time.hidden=!show.time;
+}
 function renderEvents(events){
 
- const grouped=new Map([...tagChoices.values()].map(tag=>[tag.epc,{epc:tag.epc,count:tag.count,event:tag.event}]));
+ const grouped=new Map([...tagCards.values()].map(tag=>[tag.uid,{...tag}]));
 
- for(const event of [...events].sort((a,b)=>Number(a.id)-Number(b.id)))for(const epc of findEpcs(event.payload)){const item=grouped.get(epc)||{epc,count:0};item.event=event;item.count=eventReadCount(event,epc,item.count);grouped.set(epc,item);}
+ for(const event of [...events].sort((a,b)=>Number(a.id)-Number(b.id)))applyTagEvent(grouped,event);
 
- const display=[...grouped.values()].sort((a,b)=>b.count-a.count||Date.parse(b.event.receivedAt)-Date.parse(a.event.receivedAt)||a.epc.localeCompare(b.epc));
+ for(const tag of tagChoices.values())if(![...grouped.values()].some(item=>item.epc===tag.epc))grouped.set(tag.epc,{uid:tag.epc,epc:tag.epc,tid:'',count:tag.count,event:tag.event});
+
+ dropTidlessDuplicates(grouped);
+
+ const display=[...grouped.values()].sort((a,b)=>b.count-a.count||Date.parse(b.event.receivedAt)-Date.parse(a.event.receivedAt)||a.uid.localeCompare(b.uid));
 
  if(!display.length){feedList.replaceChildren(el('p','No tags scanned yet.','empty'));updateTagDetails(selectedEpc&&tagChoices.has(selectedEpc)?tagChoices.get(selectedEpc):null);filterTagList();return;}
 
- const selected=selectedEpc?(grouped.get(selectedEpc)||tagChoices.get(selectedEpc)):!selectionInitialized?display[0]:null;
+ const selected=selectedEpc?(display.find(item=>item.epc===selectedEpc)||tagChoices.get(selectedEpc)):!selectionInitialized?display[0]:null;
 
- if(selected){selectedEpc=selected.epc;selectionInitialized=true;updateTagOptions();$('epc').value=selectedEpc;updateTagDetails(selected);}else{selectedEpc='';updateTagOptions();updateTagDetails(null);}
+ if(selected){selectedEpc=selected.epc;selectionInitialized=true;updateTagOptions();$('epc').value=selectedEpc;updateTagDetails(selected);}else{selectedEpc='';selectedUid='';updateTagOptions();updateTagDetails(null);}
 
- const existing=new Map([...feedList.querySelectorAll('.eventitem')].map(row=>[row._item.epc,row]));
+ const existing=new Map([...feedList.querySelectorAll('.eventitem')].map(row=>[row._item.uid,row]));
 
  for(const node of [...feedList.children])if(!node.classList.contains('eventitem'))node.remove();
 
+ const shared=new Map();for(const item of display)shared.set(item.epc,(shared.get(item.epc)||0)+1);
+
  for(const next of display){
 
-  let row=existing.get(next.epc),item;
+  let row=existing.get(next.uid),item;
 
-  if(row){item=row._item;Object.assign(item,next);existing.delete(next.epc);}
+  if(row){item=row._item;Object.assign(item,next);existing.delete(next.uid);}
 
   else{
 
    item=next;row=el('div',undefined,'eventitem');row._item=item;
 
-   const card=el('details',undefined,'eventcard'),summary=el('summary');card.dataset.epc=item.epc;card.id='tag-details-'+item.epc;summary.append(el('strong'),el('span'));card.append(summary);row.append(card);
+   const card=el('details',undefined,'eventcard'),summary=el('summary');card.dataset.epc=item.epc;card.dataset.uid=item.uid;card.id='tag-details-'+item.uid.replace(/[^0-9A-Za-z]/g,'-');const same=el('span',undefined,'tagSameEpc');same.hidden=true;summary.append(el('span',undefined,'tagReadCount'),el('strong',undefined,'tagCardName'),el('span',undefined,'tagCardMeta'),same,el('span',undefined,'tagCardTime'));card.append(summary);row.append(card);
 
-   summary.addEventListener('click',event=>{event.preventDefault();selectedEpc=item.epc;selectionInitialized=true;updateTagOptions(true);$('epc').value=selectedEpc;openWriteDialog(item.epc);$('epc').dispatchEvent(new Event('change'));});
+   summary.addEventListener('click',event=>{event.preventDefault();selectedEpc=item.epc;selectedUid=item.uid;selectionInitialized=true;updateTagOptions(true);$('epc').value=selectedEpc;openWriteDialog(item.epc);$('epc').dispatchEvent(new Event('change'));});
 
    const action=el('div',undefined,'tagAction'),button=el('button');button.type='button';button.hidden=true;button.className='chooseTag';button.dataset.epc=item.epc;button.onclick=()=>summary.click();
 
@@ -173,11 +211,7 @@ function renderEvents(events){
 
   feedList.append(row);
 
-  const summary=row.querySelector('summary'),label=(epcAscii(item.epc)||item.epc)+' · Reads: '+item.count+' times';
-
-  if(summary.firstChild.textContent!==label)summary.firstChild.textContent=label;
-
-  summary.lastChild.textContent=new Date(item.event.receivedAt).toLocaleString('en-GB');
+  paintTagCard(row,item,shared.get(item.epc)||1);
 
   const state=userReadStatus(item.event.payload,item.epc);row.dataset.group=state.key==='error'&&/Memory overrun/.test(state.label)?'overrun':state.key;
 
@@ -189,7 +223,7 @@ function renderEvents(events){
 
 }
 
-function readSummary(events){const epcs=new Set();for(const event of events)for(const epc of findEpcs(event.payload))epcs.add(epc);return epcs.size+' unique tags · '+NativeRfid.scanStats.totalReads+' total reads';}
+function readSummary(events){const ids=new Map();for(const event of events)for(const id of tagIdsIn(event.payload))ids.set(id.uid,id);dropTidlessDuplicates(ids);return ids.size+' unique tags · '+NativeRfid.scanStats.totalReads+' total reads';}
 
 async function loadEvents(before=null,manual=false){
 
@@ -235,7 +269,7 @@ async function pollLive(){
 
   if(data.events.length){rememberTags(data.events);for(const item of data.events)latestId=Math.max(latestId,Number(item.id));
 
-   if(onOlderPage){pendingEvents+=data.events.length;$('latestEvents').textContent='Latest data (+'+pendingEvents+')';}
+   if(onOlderPage){pendingEvents+=data.events.length;setButtonLabel($('latestEvents'),'Latest data (+'+pendingEvents+')');}
 
    else {const combined=[...data.events,...visibleEvents];const unique=[...new Map(combined.map(item=>[Number(item.id),item])).values()].sort((a,b)=>Number(b.id)-Number(a.id));visibleEvents=unique.filter(isRecent).slice(0,50);olderCursor=unique.length>50?unique[49].id:olderCursor;renderEvents(visibleEvents);feedSignature=visibleEvents.map(e=>e.id).join(',');$('olderEvents').hidden=!olderCursor;$('feedStatus').textContent='LIVE · '+readSummary(visibleEvents);}
 
@@ -297,7 +331,7 @@ async function pollReaderStatus(){
 
 }
 
-$('latestEvents').textContent='Latest data';
+setButtonLabel($('latestEvents'),'Latest data');
 
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){pollLive();pollReaderStatus();}});
 
@@ -425,12 +459,30 @@ $('memoryBank').addEventListener('change',()=>{
 
 $('memoryBank').dispatchEvent(new Event('change'));
 
-async function writerStatus(){try{const response=await fetch('/api/write/config');const data=await response.json();endpoint=data.available?'/api/write':'';$('below').textContent=data.available?'On-device SDK · Read-back verification':'Connect the integrated reader';$('write').innerHTML=data.available?'<span>✎</span> Write tag':'<span>✎</span> Waiting for connection';update();}catch{endpoint='';$('below').textContent='Reader connection unavailable';$('write').innerHTML='<span>✎</span> Waiting for connection';update();}}writerStatus();setInterval(writerStatus,10000);
+async function writerStatus(){try{const response=await fetch('/api/write/config');const data=await response.json();endpoint=data.available?'/api/write':'';$('below').textContent=data.available?'On-device SDK · Read-back verification':'Connect the integrated reader';setButtonLabel($('write'),data.available?'Write tag':'Waiting for connection');update();}catch{endpoint='';$('below').textContent='Reader connection unavailable';setButtonLabel($('write'),'Waiting for connection');update();}}writerStatus();setInterval(writerStatus,10000);
 
 let visibleTagLimit=10;const readMoreTags=el('button','Read more');readMoreTags.id='readMoreTags';readMoreTags.hidden=true;feedList.after(readMoreTags);readMoreTags.onclick=()=>{visibleTagLimit+=10;filterTagList();};
-function filterTagList(){const hasTags=feedList.querySelector('.eventitem')!==null;$('openTagFilter').hidden=!hasTags;const query=($('tagSearch')?.value||'').trim().toLowerCase(),group=document.querySelector('[name=tagGroup]:checked')?.value||'all';let matches=0;const rows=[...feedList.querySelectorAll('.eventitem')],counts={all:rows.length,readable:0,overrun:0,error:0,unknown:0};for(const row of rows){const epc=row.querySelector('.chooseTag')?.dataset.epc||'';counts[row.dataset.group]++;row.hidden=(group!=='all'&&row.dataset.group!==group)||(!!query&&!((epcAscii(epc)||'')+' '+epc).toLowerCase().includes(query));if(!row.hidden){matches++;row.hidden=matches>visibleTagLimit;}}readMoreTags.hidden=matches<=visibleTagLimit;document.querySelectorAll('[data-filter-count]').forEach(node=>{node.textContent=counts[node.dataset.filterCount]||0;});if($('filterEmpty'))$('filterEmpty').hidden=matches>0||rows.length===0;const status=$('searchStatus');if(status){status.hidden=!query&&group==='all';status.textContent=matches?'Found '+matches+' tags':'No tags match the filters';}const opener=$('openTagFilter');if(opener)opener.textContent=query||group!=='all'?'Filter · '+matches:'Filter';if($('applyTagFilter'))$('applyTagFilter').textContent='Show '+matches+' tags';}
+function filterTagList(){const hasTags=feedList.querySelector('.eventitem')!==null;$('openTagFilter').hidden=!hasTags;const query=($('tagSearch')?.value||'').trim().toLowerCase(),group=document.querySelector('[name=tagGroup]:checked')?.value||'all';let matches=0;const rows=[...feedList.querySelectorAll('.eventitem')],counts={all:rows.length,readable:0,overrun:0,error:0,unknown:0};for(const row of rows){const epc=row.querySelector('.chooseTag')?.dataset.epc||'',tid=row._item?.tid||'';counts[row.dataset.group]++;row.hidden=(group!=='all'&&row.dataset.group!==group)||(!!query&&!((epcAscii(epc)||'')+' '+epc+' '+tid).toLowerCase().includes(query));if(!row.hidden){matches++;row.hidden=matches>visibleTagLimit;}}readMoreTags.hidden=matches<=visibleTagLimit;document.querySelectorAll('[data-filter-count]').forEach(node=>{node.textContent=counts[node.dataset.filterCount]||0;});if($('filterEmpty'))$('filterEmpty').hidden=matches>0||rows.length===0;const status=$('searchStatus');if(status){status.hidden=!query&&group==='all';status.textContent=matches?'Found '+matches+' tags':'No tags match the filters';}const opener=$('openTagFilter');if(opener){opener.dataset.active=query||group!=='all'?'1':'0';opener.setAttribute('aria-label',query||group!=='all'?'Filter · '+matches+' tags':'Filter tags');}if($('applyTagFilter'))setButtonLabel($('applyTagFilter'),'Show tags');}
 
 const filterDialog=$('tagFilterDialog');$('openTagFilter').onclick=()=>{filterTagList();if(filterDialog.showModal)filterDialog.showModal();else filterDialog.setAttribute('open','');$('tagSearch').focus();};function closeTagFilter(){if(filterDialog.close)filterDialog.close();else filterDialog.removeAttribute('open');$('openTagFilter').focus();}$('closeTagFilter').onclick=closeTagFilter;$('applyTagFilter').onclick=closeTagFilter;filterDialog.addEventListener('cancel',()=>{$('openTagFilter').focus();});filterDialog.addEventListener('click',event=>{if(event.target===filterDialog){const rect=filterDialog.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)closeTagFilter();}});$('tagSearch').addEventListener('input',filterTagList);document.querySelectorAll('[name=tagGroup]').forEach(input=>input.addEventListener('change',filterTagList));$('resetTagFilter').onclick=()=>{$('tagSearch').value='';document.querySelector('[name=tagGroup][value=all]').checked=true;filterTagList();};
+const displayFields=el('fieldset',undefined,'filterDisplay');displayFields.append(el('legend','Show on tag cards'));
+for(const [key,label] of [['name','Name'],['epc','EPC'],['tid','TID'],['rssi','RSSI'],['time','Time']]){const row=el('label'),input=el('input');input.type='checkbox';input.name='tagDisplay';input.value=key;input.checked=!!tagDisplay[key];input.addEventListener('change',()=>{tagDisplay[key]=input.checked;try{localStorage.setItem('tagDisplay',JSON.stringify(tagDisplay));}catch(_error){}renderEvents(visibleEvents);});row.append(input,el('span',label));displayFields.append(row);}
+const tidScanRow=el('label',undefined,'filterTidScan'),tidScanInput=el('input');tidScanInput.type='checkbox';tidScanInput.id='tidScanToggle';tidScanInput.checked=(()=>{try{return localStorage.getItem('tidScan')!=='0';}catch(_error){return true;}})();
+tidScanRow.append(tidScanInput,el('span','Read TID while scanning: shows tags with the same EPC separately. Scanning reads about half as often.'));displayFields.append(tidScanRow);
+$('searchStatus').before(displayFields);
+let tidSyncing=false;
+async function syncTidScan(){
+ if(tidSyncing||!NativeRfid.currentState.connected)return;const wanted=tidScanInput.checked;if(NativeRfid.currentState.tidScan===wanted)return;
+ tidSyncing=true;let ok=false;
+ try{const reply=await NativeRfid.command('scanTid',{enabled:wanted});ok=reply.status==='success';if(ok)NativeRfid.state({tidScan:reply.tidScan===true});else{tidScanInput.checked=!wanted;showToast('failure','TID scanning could not be changed · '+(reply.message||''));}}
+ catch(error){tidScanInput.checked=!wanted;showToast('failure','TID scanning could not be changed · '+error.message);}
+ finally{tidSyncing=false;}
+ if(ok&&tidScanInput.checked!==wanted)syncTidScan();
+}
+tidScanInput.addEventListener('change',()=>{try{localStorage.setItem('tidScan',tidScanInput.checked?'1':'0');}catch(_error){}syncTidScan();});
+window.addEventListener('readerstate',()=>{if(NativeRfid.currentState.connected&&!NativeRfid.currentState.reading)syncTidScan();});
+$('tagSearch').previousElementSibling.textContent='Name, EPC or TID';
+
 
 const editorPanel=document.querySelector('.editor');function updateEditorSticky(){if(editorPanel)editorPanel.style.setProperty('--editor-top',Math.min(16,window.innerHeight-editorPanel.getBoundingClientRect().height-16)+'px');}if(typeof ResizeObserver!=='undefined'&&editorPanel)new ResizeObserver(updateEditorSticky).observe(editorPanel);window.addEventListener('resize',updateEditorSticky);updateEditorSticky();
 
@@ -473,13 +525,26 @@ const tabThumb=el('span',undefined,'tabThumb'),detailsTab=el('button','Details')
 for(const tab of [detailsTab,writeTab]){tab.type='button';tab.setAttribute('role','tab');}
 detailsTab.id='modalDetailsTab';writeTab.id='modalWriteTab';modalTabs.append(tabThumb,detailsTab,writeTab);
 const modalBody=el('div',undefined,'modalBody');modalBody.append(document.querySelector('.panel.tagdetails'),document.querySelector('.panel.editor'),document.querySelector('.panel.result'));
-const modalHeader=el('div',undefined,'modalHeader');modalHeader.append(writeHeading,modalTabs);writeDialog.append(modalHeader,modalBody);document.body.append(writeDialog);
+const duplicateEpcNote=el('p',undefined,'duplicateEpcNote');duplicateEpcNote.id='duplicateEpcNote';duplicateEpcNote.hidden=true;duplicateEpcNote.setAttribute('role','status');modalBody.prepend(duplicateEpcNote);const modalHeader=el('div',undefined,'modalHeader');modalHeader.append(writeHeading,modalTabs);writeDialog.append(modalHeader,modalBody);document.body.append(writeDialog);
 function setModalView(view){if(window.writeUiLocked||window.powerUiLocked)return;if(view==='details')$('data').blur();writeDialog.dataset.view=view;detailsTab.setAttribute('aria-selected',String(view==='details'));writeTab.setAttribute('aria-selected',String(view==='write'));detailsTab.tabIndex=view==='details'?0:-1;writeTab.tabIndex=view==='write'?0:-1;}
-detailsTab.onclick=()=>setModalView('details');writeTab.onclick=()=>setModalView('write');
+function openWriteDestination(){const destination=$('memoryBank');destination.focus({preventScroll:true});if(typeof destination.showPicker==='function')try{destination.showPicker();}catch(_error){destination.click();}else destination.click();}
+detailsTab.onclick=()=>setModalView('details');writeTab.onclick=()=>{setModalView('write');openWriteDestination();};
 let tabTouchX=null;modalTabs.addEventListener('touchstart',event=>{tabTouchX=event.touches[0]?.clientX;},{passive:true});modalTabs.addEventListener('touchend',event=>{const x=event.changedTouches[0]?.clientX;if(tabTouchX!==null&&Math.abs(x-tabTouchX)>20)setModalView(x>tabTouchX?'write':'details');tabTouchX=null;},{passive:true});
 modalTabs.addEventListener('keydown',event=>{if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;event.preventDefault();const tab=event.key==='ArrowLeft'?detailsTab:writeTab;tab.click();tab.focus();});setModalView('write');
 
-function openWriteDialog(epc){writeTitle.textContent=(epcAscii(epc)||epc);if(!writeDialog.open){if(writeDialog.showModal)writeDialog.showModal();else writeDialog.setAttribute('open','');}refreshSelectedTagDetails();editorDirty=false;editorLoadedKey='';loadExistingData();NativeRfid.invalidateBanks(epc);}
+const readerSidebar=document.querySelector('.readerSidebar'),readerHeading=readerSidebar?.querySelector('.sidebarHeading');
+if(readerSidebar&&readerHeading){
+ const readerControlsToggle=el('button');readerControlsToggle.id='readerControlsToggle';readerControlsToggle.type='button';readerControlsToggle.setAttribute('aria-label','Show reader controls');readerControlsToggle.setAttribute('aria-expanded','false');readerControlsToggle.innerHTML='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 12h2M10 12h10M4 17h7M15 17h5"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="13" cy="17" r="2"/></svg>';
+ readerHeading.append(readerControlsToggle);readerSidebar.classList.add('readerControlsCollapsed');
+ function setReaderControlsCollapsed(collapsed){readerSidebar.classList.toggle('readerControlsCollapsed',collapsed);readerControlsToggle.setAttribute('aria-expanded',String(!collapsed));readerControlsToggle.setAttribute('aria-label',collapsed?'Show reader controls':'Hide reader controls');}
+ readerControlsToggle.onclick=()=>setReaderControlsCollapsed(!readerSidebar.classList.contains('readerControlsCollapsed'));
+ let autoHideTimer=null;
+ function autoHideReaderControls(){clearTimeout(autoHideTimer);autoHideTimer=setTimeout(function wait(){if(window.powerUiLocked||window.writeUiLocked||busy){autoHideTimer=setTimeout(wait,300);return;}setReaderControlsCollapsed(true);},700);}
+ readerSidebar.addEventListener('change',event=>{if(event.target.closest('.sidebarHeading'))return;autoHideReaderControls();});
+ readerSidebar.addEventListener('click',event=>{const control=event.target.closest('button');if(!control||control===readerControlsToggle||control.closest('.sidebarHeading'))return;autoHideReaderControls();});
+}
+
+function openWriteDialog(epc){writeTitle.textContent=(epcAscii(epc)||epc);const twins=sharedEpcCount(epc);duplicateEpcNote.hidden=twins<2;duplicateEpcNote.textContent=twins+' tags share this EPC. A write goes to whichever answers first: keep only the tag you want near the reader.';if(!writeDialog.open){if(writeDialog.showModal)writeDialog.showModal();else writeDialog.setAttribute('open','');}refreshSelectedTagDetails();editorDirty=false;editorLoadedKey='';loadExistingData();NativeRfid.invalidateBanks(epc);}
 
 function closeWriteDialog(){if(busy){showToast('warning','Wait for the write result before closing');return;}document.getElementById('data').blur();if(writeDialog.close)writeDialog.close();else writeDialog.removeAttribute('open');}
 
@@ -488,106 +553,100 @@ writeClose.onclick=closeWriteDialog;writeDialog.addEventListener('cancel',event=
 function refreshSelectedTagDetails(){updateTagDetails(tagChoices.get($('epc').value)||null);}
 
 let pendingWriteBadge='',lockedControls=[];
-const writeProgress=el('div',undefined,'writeProgress');writeProgress.hidden=true;writeProgress.setAttribute('role','status');writeProgress.setAttribute('aria-live','polite');writeProgress.append(el('strong','Writing and verifying...'),el('p','Keep the tag close to the reader. Do not move it away until the operation finishes.'));writeDialog.append(writeProgress);
+const writeProgress=el('div',undefined,'writeProgress');writeProgress.hidden=true;writeProgress.setAttribute('role','status');writeProgress.setAttribute('aria-live','polite');writeProgress.append(el('strong','Writing and verifying...'),el('p','Bring the tag close if it moved away after the scan. Keep the tag close until writing finishes. Full power is used for the write, then your range setting is restored.'));writeDialog.append(writeProgress);
 function setWriteUiLocked(locked){window.writeUiLocked=locked;writeDialog.setAttribute('aria-busy',String(locked));writeProgress.hidden=!locked;if(locked){lockedControls=[...document.querySelectorAll('button,input,textarea,select')].map(control=>({control,disabled:control.disabled}));for(const item of lockedControls)item.control.disabled=true;}else{for(const item of lockedControls)if(item.control.isConnected)item.control.disabled=item.disabled;lockedControls=[];}}
 for(const type of ['click','keydown','submit'])document.addEventListener(type,event=>{if(window.writeUiLocked||window.powerUiLocked){event.preventDefault();event.stopImmediatePropagation();}},true);
 const writeBadge=document.createElement('dialog');writeBadge.id='writeSuccessBadge';writeBadge.setAttribute('aria-label','Write successful');writeBadge.setAttribute('role','alertdialog');writeBadge.innerHTML='<svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7 12l3 3 7-7"/></svg><h2>Write successful</h2><p></p><button type="button">OK</button>';document.body.append(writeBadge);writeBadge.querySelector('button').onclick=()=>writeBadge.close();
 function showWriteBadge(message,title='Write successful',failed=false){writeBadge.querySelector('h2').textContent=title;writeBadge.setAttribute('aria-label',title);writeBadge.classList.toggle('failed',failed);writeBadge.querySelector('p').textContent=message;if(writeBadge.showModal)writeBadge.showModal();else writeBadge.setAttribute('open','');}
 
-const resetPanel=el('details',undefined,'resetPanel');resetPanel.append(el('summary','Factory reset'));
-
-resetPanel.append(el('p','Select the memory to clear to 00. This does not restore original factory identifiers or unlock memory. Keep the tag close to the reader.'));
-const resetOptions=el('fieldset',undefined,'resetOptions');resetOptions.append(el('legend','Reset selected memory'));
-for(const [bank,label] of [['USER','USER — Clear stored data'],['EPC','EPC — Clear tag ID (CRC / PC protected)'],['TID','TID — Only if writable; factory-locked tags will fail'],['RESERVED','RESERVED — Set Access / Kill passwords to 00000000']]){const row=el('label'),input=el('input');input.type='checkbox';input.value=bank;input.name='resetBank';row.append(input,el('span',label));resetOptions.append(row);}
-resetPanel.append(resetOptions);
-const resetButton=el('button','Reset selected memory');resetButton.id='resetSelectedTag';resetButton.type='button';resetButton.disabled=true;resetPanel.append(resetButton);document.querySelector('.panel.editor').append(resetPanel);
-resetOptions.addEventListener('change',()=>{resetButton.disabled=busy||!resetOptions.querySelector('input:checked');});
-resetButton.onclick=async()=>{
- if(busy||window.powerUiLocked)return;
- const selected=[...resetOptions.querySelectorAll('input:checked')].map(input=>input.value);
- if(!selected.length)return;
- let epc=selectedEpc,password=$('accessPassword').value.trim();
- if(!epc||!NativeRfid.currentState.connected){showWriteBadge('Connect the reader and select a tag.','Reset failed',true);return;}
- if(NativeRfid.currentState.reading||NativeRfid.currentState.triggerHeld){showWriteBadge('Release the trigger before resetting this tag.','Reset failed',true);return;}
- if(password&&!/^[0-9A-Fa-f]{8}$/.test(password)){showWriteBadge('Access password must be 8 HEX digits.','Reset failed',true);return;}
- busy=true;update();writeProgress.querySelector('strong').textContent='Resetting and verifying...';setWriteUiLocked(true);
- const messages=[];let failed=false;
- try{
-  const outcome=await resetTagMemory(epc,selected,password);
-  messages.push(...outcome.messages);failed=outcome.failed;
-  if(outcome.passwordChanged)$('accessPassword').value='00000000';
-  if(outcome.newEpc)selectWrittenEpc(outcome.newEpc);
- }catch(error){failed=true;messages.push(actionableWriteMessage(error.message));}
- finally{busy=false;setWriteUiLocked(false);writeProgress.querySelector('strong').textContent='Writing and verifying...';resetPanel.open=false;if(writeDialog.close)writeDialog.close();else writeDialog.removeAttribute('open');update();showWriteBadge(messages.join('\n'),failed?'Reset incomplete':'Reset successful',failed);}
-};
-
 const clearData=el('button','Clear');clearData.id='clearData';clearData.type='button';$('data').before(clearData);clearData.onclick=()=>{if(busy)return;editorDirty=true;clearRequested=true;$('data').value='';$('offset').value=$('memoryBank').value==='EPC'?'4':'0';update();};
 $('memoryBank').addEventListener('change',()=>loadExistingData());
 
-// Shared single / batch reset uses a fresh read and verifies each selected bank.
+function readerStillBusy(result){const values=[result?.message,...Object.values(result?.readableErrors||{})];return values.some(text=>/Operation In Progress/i.test(String(text||'')));}
+async function waitForReader(onProgress){onProgress('Waiting for the reader...');await new Promise(resolve=>setTimeout(resolve,400));}
+async function readFactoryBanks(epc,password,onProgress,selected=['RESERVED','USER','EPC']){const banks=['TID',...['USER','RESERVED'].filter(bank=>selected.includes(bank))];let read;for(let attempt=0;attempt<4;attempt++){if(attempt)await waitForReader(onProgress);read=await NativeRfid.command('banks',{epc,accessPassword:password,banks});if(!readerStillBusy(read))return read;}throw Error(read?.readableErrors?.TID||read?.message||'Reader was still busy. Not reset.');}
+function missingUserMemory(read){const value=read.banks?.USER,error=String(read.readableErrors?.USER||'');return value===''||(!value&&/OVERRUN|no user|not present/i.test(error));}
+// Factory reset clears the selected writable banks to 00. Each bank write is read back on the reader. TID stays.
 async function resetTagMemory(epc,selected,password,onProgress=()=>{}){
- const messages=[];let failed=false,passwordChanged=false,newEpc=null;
+ const messages=[];let failed=false,passwordChanged=false,newEpc=null;const wrote=[];
  try{
   if(!NativeRfid.currentState.connected)throw Error('Reader disconnected. Not reset.');
   if(NativeRfid.currentState.reading||NativeRfid.currentState.triggerHeld)throw Error('Release the trigger. Not reset.');
   onProgress('Reading memory...');
-  const read=await NativeRfid.command('banks',{epc,accessPassword:password});
+  const read=await readFactoryBanks(epc,password,onProgress,selected);
   if(read.status!=='success')throw Error(read.message||'Tag not reachable. Not reset.');
-  for(const bank of ['USER','TID','RESERVED','EPC'].filter(bank=>selected.includes(bank))){
-   const hex=bank==='EPC'?epc:read.banks?.[bank];
-   if(typeof hex!=='string'||!/^(?:[0-9A-F]{4})+$/i.test(hex)||hex.length/2>1024){failed=true;messages.push(bank+': '+(read.readableErrors?.[bank]||'No complete readable memory. Not reset.'));continue;}
-   const length=hex.length/2;onProgress('Resetting '+bank+'...');
-   const reply=await NativeRfid.command('write',{operation:'write',memoryBank:bank,epc,offsetBytes:bank==='EPC'?4:0,lengthBytes:length,accessPassword:password,confirmSensitive:bank==='TID'||bank==='RESERVED',dataHex:'00'.repeat(length)});
-   if(reply.status!=='success'||reply.verified!==true){messages.push(bank+': '+actionableWriteMessage(reply.message||'Reset not confirmed. Read before retrying.'),'Remaining selected memory was not reset.');return {failed:true,uncertain:reply.status!=='failed',messages,passwordChanged,newEpc};}
-   messages.push(bank+': '+length+' bytes cleared. Read-back verified.');
+  const originalTid=typeof read.banks?.TID==='string'?read.banks.TID.toUpperCase():'';
+  if(!originalTid||!/^(?:[0-9A-F]{4})+$/i.test(originalTid))throw Error(read.readableErrors?.TID||'Could not read TID. Not reset.');
+  for(const bank of ['RESERVED','USER','EPC'].filter(bank=>selected.includes(bank))){
+   if(bank==='USER'&&missingUserMemory(read)){messages.push('USER: this tag has no USER memory. Skipped.');continue;}
+   const source=bank==='EPC'?epc:read.banks?.[bank];
+   const readable=typeof source==='string'&&/^(?:[0-9A-F]{4})+$/i.test(source)&&(bank!=='RESERVED'||source.length>=16)&&source.length/2<=1024;
+   if(!readable){messages.push(bank+': '+(read.readableErrors?.[bank]||'No complete readable memory. Left unchanged.'));continue;}
+   const length=bank==='RESERVED'?8:source.length/2,current=bank==='RESERVED'?source.slice(0,16):source;
+   if(/^0+$/.test(current)){messages.push(bank==='EPC'?'EPC is already 00.':bank+': already 00 ('+length+' bytes read).');continue;}
+   onProgress('Resetting '+bank+'...');
+   const body={operation:'write',memoryBank:bank,epc:newEpc||epc,offsetBytes:bank==='EPC'?4:0,lengthBytes:length,accessPassword:password,confirmSensitive:bank==='RESERVED',dataHex:'00'.repeat(length),beforeHex:current.toUpperCase(),tidHex:originalTid};
+   let reply=await NativeRfid.command('write',body);
+   if(bank==='USER'&&(reply.status!=='success'||reply.verified!==true)&&readerStillBusy(reply)){await waitForReader(onProgress);delete body.beforeHex;reply=await NativeRfid.command('write',body);}
+   if(reply.status!=='success'||reply.verified!==true){const detail=reply.message||'Reset not confirmed. Read before retrying.';const definite=reply.status==='failed'||(!reply.verifiedBytes&&/insufficient RF power|Operation In Progress/i.test(detail));messages.push(bank+': '+actionableWriteMessage(detail),'Remaining memory was not reset.');return {failed:true,uncertain:!definite,messages,passwordChanged,newEpc};}
+   wrote.push(bank);
    if(bank==='RESERVED'){password='00000000';passwordChanged=true;}
-   if(bank==='EPC'&&reply.newEpc)newEpc=reply.newEpc;
+   if(bank==='EPC')newEpc=reply.newEpc||'00'.repeat(length);
+   messages.push(bank==='EPC'?(reply.blankEpcByAbsence?'EPC is 00: the old EPC no longer answers. Other tags with EPC 00 prevented a TID check.':'EPC is 00 (TID confirmed).'):bank+': '+length+' bytes verified 00 on the reader.');
   }
+  if(!wrote.length&&!messages.some(text=>/already 00|no USER memory/.test(text))){failed=true;if(!messages.length)messages.push('No writable memory was reset.');}
+  messages.push('TID was not rewritten.');
  }catch(error){failed=true;messages.push(actionableWriteMessage(error.message));return {failed,uncertain:/timed out|timeout/i.test(error.message),messages,passwordChanged,newEpc};}
  return {failed,messages,passwordChanged,newEpc};
 }
-const openMultiReset=el('button','Reset tags');openMultiReset.id='factoryReset';openMultiReset.type='button';openMultiReset.hidden=true;openMultiReset.setAttribute('aria-haspopup','dialog');openMultiReset.setAttribute('aria-controls','multiResetDialog');$('openTagFilter').after(openMultiReset);
+const openMultiReset=el('button','Factory reset');openMultiReset.id='factoryReset';openMultiReset.type='button';openMultiReset.hidden=true;openMultiReset.setAttribute('aria-haspopup','dialog');openMultiReset.setAttribute('aria-controls','multiResetDialog');$('openTagFilter').after(openMultiReset);
 const multiResetDialog=el('dialog',undefined,'multiResetDialog');multiResetDialog.id='multiResetDialog';multiResetDialog.setAttribute('aria-labelledby','multiResetTitle');
-const multiHeader=el('div',undefined,'multiResetHeader'),multiTitle=el('h2','Reset tags');multiTitle.id='multiResetTitle';const multiClose=el('button');multiClose.type='button';multiClose.setAttribute('aria-label','Close reset tags');multiClose.innerHTML='<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';multiHeader.append(multiTitle,multiClose);
+const multiHeader=el('div',undefined,'multiResetHeader'),multiTitle=el('h2','Factory reset');multiTitle.id='multiResetTitle';const multiClose=el('button');multiClose.type='button';multiClose.setAttribute('aria-label','Close factory reset');multiClose.innerHTML='<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';multiHeader.append(multiTitle,multiClose);
 const multiBody=el('div',undefined,'multiResetBody'),multiSetup=el('div');
-const multiHint=el('p','Select tags and memory to clear to 00. Tags must stay close to the reader.');
-const multiSearch=el('input');multiSearch.type='search';multiSearch.placeholder='Search name or EPC';multiSearch.setAttribute('aria-label','Search tags to reset');
+ const multiHint=el('p','Choose what to clear to 00. Every write is read back on the reader at full power. TID stays as the chip factory ID. Tags without USER memory skip USER. Tags that share an EPC appear separately by TID; keep only the tag you want near the reader.');
+const multiBanks=el('fieldset',undefined,'multiResetBanks');multiBanks.append(el('legend','Clear'));
+for(const [bank,label] of [['USER','USER data'],['EPC','EPC (tag ID)'],['RESERVED','Passwords']]){const row=el('label'),input=el('input');input.type='checkbox';input.name='resetBank';input.value=bank;input.checked=true;input.addEventListener('change',()=>refreshMultiReset());row.append(input,el('span',label));multiBanks.append(row);}
+ const multiSearch=el('input');multiSearch.type='search';multiSearch.placeholder='Search name, EPC or TID';multiSearch.setAttribute('aria-label','Search tags to reset');
 const multiSelectAll=el('button','Select visible');multiSelectAll.type='button';const multiTags=el('div',undefined,'multiResetTags');multiTags.setAttribute('role','group');multiTags.setAttribute('aria-label','Tags to reset');
-const multiBanks=resetOptions.cloneNode(true);for(const input of multiBanks.querySelectorAll('input')){input.name='batchResetBank';input.checked=input.value==='USER';}
 const multiPasswordLabel=el('label','Access password (optional)'),multiPassword=el('input');multiPassword.id='multiResetPassword';multiPassword.type='password';multiPassword.maxLength=8;multiPassword.autocomplete='off';multiPasswordLabel.htmlFor=multiPassword.id;
 const multiNote=el('p',undefined,'multiResetNote');multiNote.id='multiResetNote';multiNote.setAttribute('role','status');
 const multiProgress=el('p',undefined,'multiResetProgress');multiProgress.hidden=true;multiProgress.setAttribute('role','status');multiProgress.setAttribute('aria-live','polite');
 const multiResults=el('div',undefined,'multiResetResults');multiResults.id='multiResetResults';
-const multiFooter=el('div',undefined,'multiResetFooter'),multiStart=el('button','Reset selected tags');multiStart.id='startMultiReset';multiStart.type='button';multiFooter.append(multiStart);
-multiSetup.append(multiHint,multiSearch,multiSelectAll,multiTags,multiBanks,multiPasswordLabel,multiPassword,multiNote);multiBody.append(multiSetup,multiProgress,multiResults);multiResetDialog.append(multiHeader,multiBody,multiFooter);document.body.append(multiResetDialog);
+const multiFooter=el('div',undefined,'multiResetFooter'),multiStart=el('button','Factory reset');multiStart.id='startMultiReset';multiStart.type='button';multiFooter.append(multiStart);
+multiSetup.append(multiHint,multiBanks,multiSearch,multiSelectAll,multiTags,multiPasswordLabel,multiPassword,multiNote);multiBody.append(multiSetup,multiProgress,multiResults);multiResetDialog.append(multiHeader,multiBody,multiFooter);document.body.append(multiResetDialog);
 let multiRunning=false,multiLastResults=[];
 function showMultiDialog(){if(multiResetDialog.showModal)multiResetDialog.showModal();else multiResetDialog.setAttribute('open','');}
 function closeMultiDialog(){if(multiRunning)return;if(multiResetDialog.close)multiResetDialog.close();else multiResetDialog.removeAttribute('open');openMultiReset.focus();}
 multiClose.onclick=closeMultiDialog;multiResetDialog.addEventListener('cancel',event=>{if(multiRunning)event.preventDefault();});
 function multiSelectedTags(){return [...multiTags.querySelectorAll('input:checked')].map(input=>input.value);}
-function multiSelectedBanks(){return [...multiBanks.querySelectorAll('input:checked')].map(input=>input.value);}
+function factoryBanks(){return [...multiBanks.querySelectorAll('input:checked')].map(input=>input.value);}
+const bankNames={USER:'USER',EPC:'EPC',RESERVED:'passwords'};
 function refreshMultiReset(){
- const tags=multiSelectedTags(),banks=multiSelectedBanks(),query=multiSearch.value.trim().toLowerCase();for(const row of multiTags.children)row.hidden=!!query&&!row.textContent.toLowerCase().includes(query);
- const duplicateEpc=tags.length>1&&banks.includes('EPC'),badPassword=!!multiPassword.value&&!/^[0-9a-f]{8}$/i.test(multiPassword.value);
- multiNote.textContent=duplicateEpc?'Reset EPC on one tag at a time to avoid duplicate IDs. Uncheck EPC to reset multiple tags.':badPassword?'Access password must be 8 HEX digits.':tags.length+' selected · '+banks.length+' memory banks';
- multiStart.textContent='Reset '+tags.length+' selected '+(tags.length===1?'tag':'tags');multiStart.disabled=multiRunning||!tags.length||!banks.length||duplicateEpc||badPassword||!NativeRfid.currentState.connected;
+ const tags=multiSelectedTags(),banks=factoryBanks(),query=multiSearch.value.trim().toLowerCase();for(const row of multiTags.children)row.hidden=!!query&&!row.textContent.toLowerCase().includes(query);
+ const badPassword=!!multiPassword.value&&!/^[0-9a-f]{8}$/i.test(multiPassword.value);
+ multiNote.textContent=!tags.length?'Select at least one tag.':!banks.length?'Select at least one memory bank to clear.':badPassword?'Access password must be 8 HEX digits.':tags.length+' '+(tags.length===1?'tag':'tags')+' · '+banks.map(bank=>bankNames[bank]).join(', ')+' become 00. TID stays.';
+ setButtonLabel(multiStart,'Factory reset '+tags.length+' '+(tags.length===1?'tag':'tags'));multiStart.disabled=multiRunning||!tags.length||!banks.length||badPassword||!NativeRfid.currentState.connected;
 }
 openMultiReset.onclick=()=>{
  if(busy||window.powerUiLocked)return;
  multiSetup.hidden=false;multiFooter.hidden=false;multiProgress.hidden=true;multiResults.replaceChildren();multiSearch.value='';multiPassword.value='';multiTags.replaceChildren();
- for(const item of [...tagChoices.values()].sort((a,b)=>b.count-a.count)){const row=el('label'),input=el('input');input.type='checkbox';input.value=item.epc;input.checked=selectionInitialized&&item.epc===selectedEpc;input.addEventListener('change',refreshMultiReset);const caption=el('span'),name=epcAscii(item.epc);caption.append(el('strong',name||item.epc));if(name)caption.append(el('small',item.epc));row.append(input,caption);multiTags.append(row);}
- for(const input of multiBanks.querySelectorAll('input'))input.checked=input.value==='USER';refreshMultiReset();showMultiDialog();
+ const listed=[...tagCards.values()].sort((a,b)=>b.count-a.count);
+ for(const item of listed.length?listed:[...tagChoices.values()]){const row=el('label'),input=el('input');input.type='checkbox';input.value=item.epc;input.dataset.uid=item.uid||item.epc;input.checked=true;input.addEventListener('change',refreshMultiReset);const caption=el('span'),name=epcAscii(item.epc),twins=sharedEpcCount(item.epc);caption.append(el('strong',name||item.epc));const bits=[];if(name)bits.push(item.epc);if(item.tid)bits.push('TID '+item.tid);if(twins>1)bits.push('Same EPC × '+twins);if(bits.length)caption.append(el('small',bits.join(' · ')));row.append(input,caption);multiTags.append(row);}
+ refreshMultiReset();showMultiDialog();
 };
-multiSearch.addEventListener('input',refreshMultiReset);multiPassword.addEventListener('input',refreshMultiReset);multiBanks.addEventListener('change',refreshMultiReset);
+multiSearch.addEventListener('input',refreshMultiReset);multiPassword.addEventListener('input',refreshMultiReset);
 multiSelectAll.onclick=()=>{const visible=[...multiTags.children].filter(row=>!row.hidden),all=visible.length&&visible.every(row=>row.querySelector('input').checked);for(const row of visible)row.querySelector('input').checked=!all;refreshMultiReset();};
 const viewResetResults=el('button','View results');viewResetResults.id='viewResetResults';viewResetResults.type='button';viewResetResults.hidden=true;writeBadge.append(viewResetResults);viewResetResults.onclick=()=>{if(writeBadge.close)writeBadge.close();else writeBadge.removeAttribute('open');multiSetup.hidden=true;multiFooter.hidden=true;multiProgress.hidden=true;showMultiDialog();};
 const ordinaryShowWriteBadge=showWriteBadge;showWriteBadge=function(...args){viewResetResults.hidden=true;ordinaryShowWriteBadge(...args);};
 multiStart.onclick=async()=>{
  if(multiRunning||busy||window.powerUiLocked)return;refreshMultiReset();if(multiStart.disabled)return;
  if(NativeRfid.currentState.triggerHeld||NativeRfid.currentState.reading){multiNote.textContent='Release the trigger before resetting tags.';return;}
- const targets=multiSelectedTags(),banks=multiSelectedBanks(),password=multiPassword.value.trim();
+ const targets=multiSelectedTags(),banks=factoryBanks(),password=multiPassword.value.trim();
  multiRunning=true;busy=true;setWriteUiLocked(true);update();multiSetup.hidden=true;multiProgress.hidden=false;multiResults.replaceChildren();multiLastResults=[];
+ const scanPower=Number(NativeRfid.currentState.powerDbm),fullPower=Number(NativeRfid.currentState.maxDbm);let raisedPower=false;
  try{
+  // One power change for the whole batch; each write then runs at full power without per-bank switching.
+  if(Number.isFinite(fullPower)&&Number.isFinite(scanPower)&&scanPower+0.05<fullPower){multiProgress.textContent='Raising power to '+fullPower+' dBm...';const power=await NativeRfid.command('power',{powerDbm:fullPower});raisedPower=power.status==='success';}
   for(let index=0;index<targets.length;index++){
    const epc=targets[index],name=epcAscii(epc)||epc,row=el('details'),summary=el('summary',name+' — Waiting'),detail=el('p');row.append(summary,detail);multiResults.append(row);
    const outcome=await resetTagMemory(epc,banks,password,state=>{summary.textContent=name+' — '+state;multiProgress.textContent=(index+1)+' / '+targets.length+' · '+state+' Keep tags close. Do not pull the trigger.';});
@@ -598,8 +657,15 @@ multiStart.onclick=async()=>{
   }
  }catch(error){multiLastResults.push({failed:true,messages:[error.message]});multiResults.append(el('p',error.message));}
  finally{
+  if(raisedPower)try{await NativeRfid.command('power',{powerDbm:scanPower});}catch(error){showToast('warning','Read range could not be restored: '+error.message);}
   busy=false;setWriteUiLocked(false);multiRunning=false;multiProgress.hidden=true;closeMultiDialog();update();const success=multiLastResults.filter(result=>!result.failed).length,failed=multiLastResults.filter(result=>result.failed).length;
   showWriteBadge(success+' / '+targets.length+' tags reset and read-back verified.'+(failed?' '+failed+' not fully reset or not attempted.':''),failed?'Reset incomplete':'Reset successful',!!failed);viewResetResults.hidden=false;
  }
 };
-const originalFilterTagList=filterTagList;filterTagList=function(){originalFilterTagList();openMultiReset.hidden=!feedList.querySelector('.eventitem');};filterTagList();
+const clearTagList=el('button','Clear');clearTagList.id='clearTagList';clearTagList.type='button';clearTagList.hidden=true;openMultiReset.after(clearTagList);
+clearTagList.onclick=()=>{
+ if(busy||window.writeUiLocked||window.powerUiLocked||multiRunning)return;
+ NativeRfid.clearScan();tagChoices.clear();tagCards.clear();tagOptionEvents.clear();selectedEpc='';selectedUid='';selectionInitialized=false;latestId=0;visibleEvents=[];pendingEvents=0;feedSignature='';olderCursor=null;onOlderPage=false;visibleTagLimit=10;
+ if(writeDialog.open)closeWriteDialog();$('epc').value='';updateTagOptions(true);updateTagDetails(null);renderEvents([]);$('feedStatus').textContent='Tag list cleared.';update();
+};
+const originalFilterTagList=filterTagList;filterTagList=function(){originalFilterTagList();const hasTags=!!feedList.querySelector('.eventitem');openMultiReset.hidden=!hasTags;clearTagList.hidden=!hasTags;};filterTagList();

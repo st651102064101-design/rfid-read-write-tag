@@ -44,7 +44,37 @@ public final class WritePolicy {
         }
     }
 
+    public static boolean matchesBaseline(String chunk, String baseline, int offsetWords) {
+        String expected = hex(chunk, false), actual = hex(baseline, false);
+        if (expected.length() % 4 != 0 || offsetWords < 0)
+            throw new IllegalArgumentException("Invalid word range");
+        int start = offsetWords * 4;
+        return start <= actual.length() && expected.length() <= actual.length() - start
+                && actual.regionMatches(start, expected, 0, expected.length());
+    }
+
     public static int paddedLength(int length) { return length + length % 2; }
+
+    public static boolean allTrue(boolean[] values) {
+        for (boolean value : values) if (!value) return false;
+        return true;
+    }
+
+    public static double maxSupportedDbm(int[] levels) {
+        if (levels == null || levels.length == 0) throw new IllegalArgumentException("Reader power levels are unavailable");
+        double max = serialPowerDbm(levels[0]);
+        for (int level : levels) max = Math.max(max, serialPowerDbm(level));
+        return max;
+    }
+
+    private static void addSupported(List<Double> powers, int[] levels, double... candidates) {
+        for (double candidate : candidates) {
+            if (!Double.isFinite(candidate)) continue;
+            boolean supported = false;
+            for (int level : levels) if (Math.abs(serialPowerDbm(level) - candidate) < 0.00001) supported = true;
+            if (supported && !powers.contains(candidate)) powers.add(candidate);
+        }
+    }
 
     /** Split complete word data into bounded writes; callers verify every returned chunk. */
     public static List<String> wordChunks(String data, int maxWords) {
@@ -60,22 +90,39 @@ public final class WritePolicy {
         return chunks;
     }
 
-    /** Near-field tags return CRC/no-response at high power; USER writes step down through supported levels. */
+    /** Writes start at the reader's maximum so a low scan range still reaches the tag; USER may then step down. */
     public static List<Double> userWritePowers(double currentDbm, int[] levels) {
         return userWritePowers(currentDbm, levels, null);
     }
 
-    /** A previously verified write power is tried first; the standard ladder remains the fallback. */
+    /** A previously verified write power is tried after maximum if the near field saturates. */
     public static List<Double> userWritePowers(double currentDbm, int[] levels, Double lastVerifiedDbm) {
         List<Double> powers = new ArrayList<>();
-        double preferred = lastVerifiedDbm == null ? Math.min(currentDbm, 20) : lastVerifiedDbm;
-        for (double candidate : new double[]{preferred, Math.min(currentDbm, 20), 15, 10}) {
-            boolean supported = false;
-            for (int level : levels) if (Math.abs(serialPowerDbm(level) - candidate) < 0.00001) supported = true;
-            if (supported && !powers.contains(candidate)) powers.add(candidate);
-        }
+        addSupported(powers, levels, maxSupportedDbm(levels), lastVerifiedDbm == null ? Double.NaN : lastVerifiedDbm, 20, 15, 10);
         if (powers.isEmpty()) powers.add(currentDbm);
         return powers;
+    }
+
+    /** EPC/RESERVED writes start at maximum, then step through proven high levels if the tag needs less. */
+    public static java.util.List<Double> epcWritePowers(double currentDbm, int[] levels) {
+        java.util.List<Double> powers = new java.util.ArrayList<>();
+        addSupported(powers, levels, maxSupportedDbm(levels), 27, 24, currentDbm);
+        if (powers.isEmpty()) powers.add(currentDbm);
+        return powers;
+    }
+
+    /** Missing-tag errors are safe to wait on before any write is issued. */
+    public static boolean tagAbsent(String explained) {
+        if (explained == null || explained.isEmpty()) return false;
+        String text = explained.toLowerCase(Locale.ROOT);
+        // MC3390R appends a stale "Operation In Progress" vendor text to tag read failures while the radio is idle.
+        if (text.contains("access_tag_read_failed") && !text.contains("charging")) return true;
+        if (text.contains("charging") || text.contains("insufficient") || text.contains("password")
+                || text.contains("overrun") || text.contains("operation in progress")) return false;
+        return text.contains("no tag") || text.contains("no_tags") || text.contains("timeout")
+                || text.contains("not found") || text.contains("out of range")
+                || text.contains("no read-back") || text.contains("access_tag_read_failed")
+                || text.contains("access_no_tag");
     }
 
     /** Never fill a neighboring byte with an assumed value. */

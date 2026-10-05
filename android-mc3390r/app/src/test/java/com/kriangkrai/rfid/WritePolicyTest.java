@@ -6,6 +6,15 @@ import static org.junit.Assert.*;
 public class WritePolicyTest {
     private static final String EPC = "E2806F12000000022DF13118";
 
+    @Test public void skipOnlyFreshIdenticalCompleteWordRanges() {
+        assertTrue(WritePolicy.matchesBaseline("00000000", "414200000000", 1));
+        assertFalse(WritePolicy.matchesBaseline("00000000", "414200000001", 1));
+        assertFalse(WritePolicy.matchesBaseline("00000000", "41420000", 1));
+        assertTrue(WritePolicy.matchesBaseline("abcd", "ABCD", 0));
+        assertThrows(IllegalArgumentException.class, () -> WritePolicy.matchesBaseline("00", "0000", 0));
+        assertThrows(IllegalArgumentException.class, () -> WritePolicy.matchesBaseline("0000", "0000", -1));
+    }
+
     @Test public void oddBytePreservesNeighborInsteadOfZeroPadding() {
         assertEquals("414243AB", WritePolicy.wordData("414243", "313233AB"));
         assertEquals("4142", WritePolicy.wordData("4142", "1234"));
@@ -21,13 +30,36 @@ public class WritePolicyTest {
         assertThrows(IllegalArgumentException.class, () -> WritePolicy.wordChunks("ABC", 16));
         assertThrows(IllegalArgumentException.class, () -> WritePolicy.wordChunks("ABCD", 0));
     }
-    @Test public void userWritesStepDownFromSaturatingNearFieldPower() {
+    @Test public void userWritesStartAtMaximumThenStepDownIfTheNearFieldSaturates() {
         int[] table = new int[298];
         for (int i = 0; i < table.length; i++) table[i] = i;
-        assertEquals(java.util.Arrays.asList(20.0, 15.0, 10.0), WritePolicy.userWritePowers(27, table));
-        assertEquals(java.util.Arrays.asList(12.5, 15.0, 10.0), WritePolicy.userWritePowers(12.5, table));
+        assertEquals(29.7, WritePolicy.maxSupportedDbm(table), 0.000001);
+        assertEquals(java.util.Arrays.asList(29.7, 20.0, 15.0, 10.0), WritePolicy.userWritePowers(27, table));
+        assertEquals(java.util.Arrays.asList(29.7, 20.0, 15.0, 10.0), WritePolicy.userWritePowers(5, table));
         assertEquals(java.util.Arrays.asList(5.0), WritePolicy.userWritePowers(5, new int[]{50}));
-        assertEquals(java.util.Arrays.asList(10.0, 20.0, 15.0), WritePolicy.userWritePowers(27, table, 10.0));
+        assertEquals(java.util.Arrays.asList(29.7, 10.0, 20.0, 15.0), WritePolicy.userWritePowers(27, table, 10.0));
+    }
+    @Test public void epcWritesStartAtMaximumFromALowScanRange() {
+        int[] table = new int[298];
+        for (int i = 0; i < table.length; i++) table[i] = i;
+        assertEquals(java.util.Arrays.asList(29.7, 27.0, 24.0, 20.0), WritePolicy.epcWritePowers(20, table));
+        assertEquals(java.util.Arrays.asList(29.7, 27.0, 24.0, 9.1), WritePolicy.epcWritePowers(9.1, table));
+    }
+    @Test public void missingTagErrorsAreSafeToWaitOnBeforeAWriteIsIssued() {
+        assertTrue(WritePolicy.tagAbsent("Reader error: RFID_NO_TAGS"));
+        assertTrue(WritePolicy.tagAbsent("Tag moved out of range"));
+        assertTrue(WritePolicy.tagAbsent("No read-back returned by the reader"));
+        assertTrue(WritePolicy.tagAbsent("Reader error: RFID_ACCESS_TAG_READ_FAILED"));
+        assertFalse(WritePolicy.tagAbsent("Reader error: RFID_CHARGING_COMMAND_NOT_ALLOWED · Charging in Progress"));
+        assertTrue(WritePolicy.tagAbsent("Reader error: RFID_ACCESS_TAG_READ_FAILED · Operation In Progress-Command Not Allowed"));
+        assertFalse(WritePolicy.tagAbsent("Reader error: RFID_ACCESS_TAG_WRITE_FAILED · Operation In Progress-Command Not Allowed"));
+        assertFalse(WritePolicy.tagAbsent("insufficient RF power"));
+        assertFalse(WritePolicy.tagAbsent("ACCESS_TAG_MEMORY_OVERRUN_ERROR"));
+    }
+    @Test public void userVerificationNeedsEveryChunkConfirmed() {
+        assertTrue(WritePolicy.allTrue(new boolean[]{true, true}));
+        assertTrue(WritePolicy.allTrue(new boolean[0]));
+        assertFalse(WritePolicy.allTrue(new boolean[]{true, false, true}));
     }
     @Test public void shortBaselineNeverProducesAWrite() {
         assertThrows(IllegalArgumentException.class, () -> WritePolicy.wordData("414243", "1234"));
