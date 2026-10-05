@@ -233,7 +233,7 @@ test('pausing connected inventory keeps the selected write form beyond tag-list 
  const a=await setup({ui:true,connected:true});try{
   await a.scan();choose(a);input(a,'ABC');a.w.NativeRfid.state({reading:false});await flush();
   const now=a.w.Date.now();a.w.Date.now=()=>now+6000;await a.tick(500);
-  assert.equal(a.doc.querySelectorAll('.eventcard').length,0);assert.equal(a.doc.querySelector('.selectionPanel').hidden,false);assert.equal(a.doc.querySelector('.panel.editor').hidden,false);assert.equal(a.doc.getElementById('epc').value,epc);assert.equal(a.doc.getElementById('write').disabled,false);
+  assert.equal(a.doc.querySelectorAll('.eventcard').length,1);assert.equal(a.doc.querySelector('.selectionPanel').hidden,false);assert.equal(a.doc.querySelector('.panel.editor').hidden,false);assert.equal(a.doc.getElementById('epc').value,epc);assert.equal(a.doc.getElementById('write').disabled,false);
   a.w.NativeRfid.state({connected:false,reading:false,message:'Disconnected'});await flush();assert.equal(a.doc.querySelector('.panel.editor').hidden,true);assert.equal(a.doc.getElementById('write').disabled,true);
  }finally{a.close();}
 });
@@ -411,5 +411,35 @@ test('tag list ranks the most repeatedly read tag above a more recent tag',async
   assert.equal(a.doc.querySelector('.eventcard').dataset.epc,epc);
   await a.scan([{epc:secondEpc,seenCount:30}]);
   assert.equal(a.doc.querySelector('.eventcard').dataset.epc,secondEpc);
+ }finally{a.close();}
+});
+
+test('Data focus switches trigger to barcode, inserts scan data and blur restores RFID',async()=>{
+ const a=await setup({ui:true,connected:true});try{
+  const data=a.doc.getElementById('data');data.focus();await flush();
+  assert.deepEqual(a.last('scannerMode').body,{mode:'barcode'});
+  a.reply('scannerMode',{status:'success',scannerMode:'barcode'});await flush();
+  a.w.NativeRfid.barcode('BOX006');assert.equal(data.value,'BOX006');
+  data.blur();await flush();assert.equal(a.last('scannerMode').body.mode,'rfid');
+  a.reply('scannerMode',{status:'success',scannerMode:'rfid'});await flush();
+  a.w.NativeRfid.barcode('IGNORED');assert.equal(data.value,'BOX006');
+ }finally{a.close();}
+});
+test('detected tags survive age and event-buffer rollover beyond 50 tags',async()=>{
+ const a=await setup({ui:true,connected:true,reading:true});try{
+  const tags=Array.from({length:80},(_,i)=>({epc:i.toString(16).padStart(24,'0').toUpperCase(),seenCount:1}));
+  await a.scan(tags);const now=a.w.Date.now();a.w.Date.now=()=>now+60000;await a.tick(500);
+  assert.equal(a.doc.querySelectorAll('.eventcard').length,80);
+  for(let i=0;i<210;i++)a.w.NativeRfid.tags([{epc,seenCount:1}]);await a.w.pollLive();
+  assert.equal(a.doc.querySelectorAll('.eventcard').length,81);
+ }finally{a.close();}
+});
+
+test('failed barcode mode switches do not accept scans or report success',async()=>{
+ const a=await setup({ui:true,connected:true});try{
+  const data=a.doc.getElementById('data');data.focus();await flush();
+  a.reply('scannerMode',{status:'failed',message:'Reader unavailable'});await flush();
+  a.w.NativeRfid.barcode('BLOCKED');assert.equal(data.value,'');
+  assert.match(a.doc.getElementById('toast').textContent,/Reader unavailable/);
  }finally{a.close();}
 });

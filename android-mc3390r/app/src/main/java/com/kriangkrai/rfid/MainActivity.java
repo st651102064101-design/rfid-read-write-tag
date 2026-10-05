@@ -23,9 +23,15 @@ public final class MainActivity extends Activity {
     private RfidBridge bridge;
     private final BroadcastReceiver dataWedgeResult = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
+            if ("com.kriangkrai.rfid.BARCODE".equals(intent.getAction())) {
+                String data = intent.getStringExtra("com.symbol.datawedge.data_string");
+                if (web != null && data != null) web.evaluateJavascript("window.NativeRfid.barcode(" + org.json.JSONObject.quote(data) + ")", null);
+                return;
+            }
             Bundle info = intent.getBundleExtra("RESULT_INFO");
             if ("RFID_ONLY_PROFILE".equals(intent.getStringExtra("COMMAND_IDENTIFIER")) && info != null
                     && "APP_ALREADY_ASSOCIATED".equals(info.getString("RESULT_CODE"))) configureRfidOnlyProfile(false);
+            if (intent.getExtras() == null) return;
             for (String key : intent.getExtras().keySet()) {
                 Object value = intent.getExtras().get(key);
                 if (value instanceof Bundle) {
@@ -39,6 +45,7 @@ public final class MainActivity extends Activity {
     private static IntentFilter dataWedgeFilter() {
         IntentFilter filter = new IntentFilter("com.symbol.datawedge.api.RESULT_ACTION");
         filter.addCategory(Intent.CATEGORY_DEFAULT);
+        filter.addAction("com.kriangkrai.rfid.BARCODE");
         return filter;
     }
     private void configureRfidOnlyProfile() { configureRfidOnlyProfile(true); }
@@ -58,17 +65,30 @@ public final class MainActivity extends Activity {
         Bundle plugin = new Bundle(), params = new Bundle();
         plugin.putString("PLUGIN_NAME", "BARCODE");
         plugin.putString("RESET_CONFIG", "true");
-        params.putString("scanner_input_enabled", "false");
+        params.putString("scanner_input_enabled", "true");
         params.putString("scanner_selection", "auto");
         plugin.putBundle("PARAM_LIST", params);
         java.util.ArrayList<Bundle> plugins = new java.util.ArrayList<>();
         plugins.add(plugin);
+        Bundle output = new Bundle(), outputParams = new Bundle();
+        output.putString("PLUGIN_NAME", "INTENT"); output.putString("RESET_CONFIG", "true");
+        outputParams.putString("intent_output_enabled", "true");
+        outputParams.putString("intent_action", "com.kriangkrai.rfid.BARCODE");
+        outputParams.putString("intent_delivery", "2");
+        output.putBundle("PARAM_LIST", outputParams); plugins.add(output);
+        Bundle keys = new Bundle(), keyParams = new Bundle();
+        keys.putString("PLUGIN_NAME", "KEYSTROKE"); keys.putString("RESET_CONFIG", "true");
+        keyParams.putString("keystroke_output_enabled", "false");
+        keys.putBundle("PARAM_LIST", keyParams); plugins.add(keys);
         config.putParcelableArrayList("PLUGIN_CONFIG", plugins);
         Intent command = new Intent("com.symbol.datawedge.api.ACTION");
         command.putExtra("com.symbol.datawedge.api.SET_CONFIG", config);
         command.putExtra("SEND_RESULT", "true");
         command.putExtra("COMMAND_IDENTIFIER", "RFID_ONLY_PROFILE");
         sendBroadcast(command);
+        Intent disable = new Intent("com.symbol.datawedge.api.ACTION");
+        disable.putExtra("com.symbol.datawedge.api.SCANNER_INPUT_PLUGIN", "DISABLE_PLUGIN");
+        sendBroadcast(disable);
     }
 
 

@@ -24,12 +24,12 @@ let tagOptionEvents=new Set(),tagOptionsDirty=false;
 function rememberTags(events){
  for(const event of events){const eventKey=String(event.id??event.receivedAt);if(tagOptionEvents.has(eventKey))continue;tagOptionEvents.add(eventKey);const epcs=findEpcs(event.payload);for(const epc of epcs){const choice=tagChoices.get(epc)||{epc,count:0,event,lastAt:event.receivedAt};choice.count=eventReadCount(event,epc,choice.count);if(!choice.lastAt||Date.parse(event.receivedAt)>=Date.parse(choice.lastAt)){choice.event=event;choice.lastAt=event.receivedAt;}delete choice.pendingRead;tagChoices.set(epc,choice);}}
  while(tagOptionEvents.size>2000)tagOptionEvents.delete(tagOptionEvents.values().next().value);
- const recent=[...tagChoices.values()].sort((a,b)=>Date.parse(b.lastAt)-Date.parse(a.lastAt));for(const choice of recent.slice(50))if(choice.epc!==selectedEpc)tagChoices.delete(choice.epc);
+
  updateTagOptions();
 }
 function updateTagOptions(force=false){
  const select=$('epc');if(!select)return;if(!force&&document.activeElement===select){tagOptionsDirty=true;return;}
- const choices=[...tagChoices.values()].sort((a,b)=>Date.parse(b.lastAt)-Date.parse(a.lastAt)).slice(0,50);select.replaceChildren(new Option('Select a detected EPC ('+choices.length+')',''));
+ const choices=[...tagChoices.values()].sort((a,b)=>b.count-a.count||Date.parse(b.lastAt)-Date.parse(a.lastAt));select.replaceChildren(new Option('Select a detected EPC ('+choices.length+')',''));
  for(const choice of choices){const status=userReadStatus(choice.event?.payload,choice.epc),ascii=epcAscii(choice.epc),name=ascii?ascii+' · '+choice.epc:choice.epc;const option=new Option(name+' · '+(choice.pendingRead?'Written. Waiting for the next reader scan':status.label+' · Reads: '+choice.count+' times'),choice.epc);select.add(option);}
  select.value=choices.some(choice=>choice.epc===selectedEpc)?selectedEpc:'';tagOptionsDirty=false;
 }
@@ -64,13 +64,13 @@ function fields(value,prefix='',out=[]){
  else out.push([prefix||'value',value!==null&&typeof value==='object'?JSON.stringify(value):String(value)]);
  return out;
 }
-function isRecent(event){const now=Date.now(),at=Date.parse(event.receivedAt);return Number.isFinite(at)&&now-at>=-1000&&now-at<LIVE_TAG_TTL_MS;}
+function isRecent(event){return !!event;}
 function eventReadCount(event,epc,fallback=0){const records=event.payload.filter(record=>record.data?.idHex===epc);const total=records.reduce((max,r)=>Math.max(max,Number(r.data.totalReads)||0),0);return total||fallback+(records.some(r=>r.type!=='MEMORY_READ')?1:0);}
 function renderEvents(events){
- const grouped=new Map();
+ const grouped=new Map([...tagChoices.values()].map(tag=>[tag.epc,{epc:tag.epc,count:tag.count,event:tag.event}]));
  for(const event of [...events].sort((a,b)=>Number(a.id)-Number(b.id)))for(const epc of findEpcs(event.payload)){const item=grouped.get(epc)||{epc,count:0};item.event=event;item.count=eventReadCount(event,epc,item.count);grouped.set(epc,item);}
  const display=[...grouped.values()].sort((a,b)=>b.count-a.count||Date.parse(b.event.receivedAt)-Date.parse(a.event.receivedAt)||a.epc.localeCompare(b.epc));
- if(!display.length){feedList.replaceChildren(el('p','No tags detected in the last 5 seconds. History is retained.','empty'));updateTagDetails(selectedEpc&&tagChoices.has(selectedEpc)?tagChoices.get(selectedEpc):null);filterTagList();return;}
+ if(!display.length){feedList.replaceChildren(el('p','No tags scanned yet.','empty'));updateTagDetails(selectedEpc&&tagChoices.has(selectedEpc)?tagChoices.get(selectedEpc):null);filterTagList();return;}
  const selected=selectedEpc?(grouped.get(selectedEpc)||tagChoices.get(selectedEpc)):!selectionInitialized?display[0]:null;
  if(selected){selectedEpc=selected.epc;selectionInitialized=true;updateTagOptions();$('epc').value=selectedEpc;updateTagDetails(selected);}else{selectedEpc='';updateTagOptions();updateTagDetails(null);}
  const existing=new Map([...feedList.querySelectorAll('.eventitem')].map(row=>[row._item.epc,row]));
@@ -159,7 +159,7 @@ setInterval(()=>{pollLive();expireOldReads();},500);
 pollReaderStatus();setInterval(pollReaderStatus,1000);
 
 function updateTagDetails(item){
- const detected=!!item?.epc&&!!item.event&&(isRecent(item.event)||(NativeRfid.currentState.connected&&!NativeRfid.currentState.reading&&item.epc===selectedEpc));document.querySelector('.panel.editor').hidden=!detected;document.querySelector('.selectionPanel').hidden=!detected;
+ const detected=NativeRfid.currentState.connected&&!!item?.epc&&!!item.event&&(isRecent(item.event)||(NativeRfid.currentState.connected&&!NativeRfid.currentState.reading&&item.epc===selectedEpc));document.querySelector('.panel.editor').hidden=!detected;document.querySelector('.selectionPanel').hidden=!detected;
 
  const compact=$('selectedTagSummary');if(compact){compact.replaceChildren();compact.append(el('strong',item?(epcAscii(item.epc)||item.epc):'No tag selected'));if(item)compact.append(el('small','Writes will use this tag'));}
 

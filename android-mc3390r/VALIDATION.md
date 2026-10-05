@@ -117,3 +117,11 @@ All Java tests pass, including the one-million-report pipeline test, 256-byte wr
 - Live cards reorder by descending cumulative read count, with latest observation and EPC as tie-breakers. Reused cards move when rankings change.
 - Interface tests: 38/38 passed, including selected-target isolation, successful/failed completion and card reorder; Java tests: 28/28 passed.
 - Hardware reset verification initially blocked by RFID_CHARGING_COMMAND_NOT_ALLOWED. No tag changes occurred in that blocked attempt.
+
+
+### 1.0.12: retained tag list and focused barcode input
+
+- Detected tag cards remain for the current app session regardless of age, 50-tag selection limits or SDK event history rollover. Ranking remains cumulative read count. Disconnected readers still disable the write editor.
+- Focusing Data queues the Zebra SDK BARCODE_MODE trigger switch and stops RFID inventory; leaving Data queues RFID_MODE. RFID trigger callbacks are ignored in barcode mode.
+- App-scoped DataWedge profile enables barcode input and broadcast output with keystroke output disabled. Barcode deliveries are accepted only for the focused Data field after a successful switch; HEX inputs encode the scanned text as bytes.
+- Interface tests 41/41 and Java tests 28/28 pass; the APK builds successfully. Initial connection attempts were blocked by charging. After installing/restarting 1.0.12 the real SDK connected successfully: Data focus switched to barcode in 560.6 ms, blur restored RFID in 215 ms, and DataWedge reported successful enable/disable. Actual barcode decoding from a physical label still needs a user trigger scan.

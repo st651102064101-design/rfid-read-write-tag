@@ -61,6 +61,7 @@ public final class RfidBridge {
     private volatile boolean accessing;
     private volatile boolean inventoryCommandPending;
     private boolean continuousReading;
+    private boolean barcodeMode;
     private int[] powerValues;
     private volatile Double powerDbm;
     private Double lastUserWritePower;
@@ -105,6 +106,16 @@ public final class RfidBridge {
                         setReading(requestedReading);
                         continuousReading = requestedReading;
                         result = success().put("reading", reading);
+                        break;
+                    case "scannerMode":
+                        String mode = payload.getString("mode");
+                        if (!mode.equals("barcode") && !mode.equals("rfid")) throw new IllegalArgumentException("Invalid scanner mode");
+                        RFIDReader modeReader = requireReader();
+                        if (reading) setReading(false);
+                        continuousReading = false;
+                        modeReader.Config.setTriggerMode(mode.equals("barcode") ? ENUM_TRIGGER_MODE.BARCODE_MODE : ENUM_TRIGGER_MODE.RFID_MODE, true);
+                        barcodeMode = mode.equals("barcode");
+                        result = success().put("scannerMode", mode);
                         break;
                     case "power": result = setPower(payload.getDouble("powerDbm")); break;
                     case "banks": result = banks(payload); break;
@@ -160,6 +171,7 @@ public final class RfidBridge {
         reader.Config.setStartTrigger(trigger.StartTrigger);
         reader.Config.setStopTrigger(trigger.StopTrigger);
         reader.Config.setTriggerMode(ENUM_TRIGGER_MODE.RFID_MODE, true);
+        barcodeMode = false;
         reader.Config.setAccessOperationWaitTimeout(1500);
         TagStorageSettings storage = reader.Config.getTagStorageSettings();
         storage.enableAccessReports(true);
@@ -831,7 +843,7 @@ public final class RfidBridge {
             } else if (type == STATUS_EVENT_TYPE.HANDHELD_TRIGGER_EVENT && !accessing && foreground) {
                 HANDHELD_TRIGGER_EVENT_TYPE trigger = event.StatusEventData.HandheldTriggerEventData.getHandheldEvent();
                 executor.execute(() -> {
-                    if (continuousReading || accessing || !foreground || disposed) return;
+                    if (barcodeMode || continuousReading || accessing || !foreground || disposed) return;
                     try { setReading(trigger == HANDHELD_TRIGGER_EVENT_TYPE.HANDHELD_TRIGGER_PRESSED); }
                     catch (Exception error) { message = explain(error); }
                     emitState();

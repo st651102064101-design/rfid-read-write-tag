@@ -3,7 +3,7 @@
  const button=document.getElementById('connectReader');let connecting=false,bankReading=false,lastBankEpc='',lastBankAttempt=0,lastBankAttemptEpc='',requestedDetail='';
  const notice=document.createElement('p');notice.className='mobileHint';notice.setAttribute('role','status');notice.id='readerMessage';button.after(notice);
  async function refresh(){await writerStatus();await pollPower();pollLive();}
- window.addEventListener('readerstate',event=>{const state=event.detail;setReaderStatus(state.connected?'online':'offline',state.connected?'Online':'Offline');button.textContent=state.connected?'Reader connected':'Connect reader';button.disabled=connecting||state.connected;button.hidden=state.connected;notice.textContent=state.connected?'':state.message||'';refresh();if(!state.reading)readSelected(requestedDetail||undefined);});
+ window.addEventListener('readerstate',event=>{const state=event.detail;setReaderStatus(state.connected?'online':'offline',state.connected?'Online':'Offline');button.textContent=state.connected?'Reader connected':'Connect reader';button.disabled=connecting||state.connected;button.hidden=state.connected;notice.textContent=state.connected?'':state.message||'';refresh();if(!state.connected){document.querySelector('.panel.editor').hidden=true;document.querySelector('.selectionPanel').hidden=true;}if(!state.reading)readSelected(requestedDetail||undefined);});
  // The SDK connection is authoritative, including after disconnect. Old tags cannot make it online.
  pollReaderStatus=async function(){const state=NativeRfid.currentState;setReaderStatus(state.connected?'online':'offline',state.connected?'Online':'Offline');};
  button.onclick=async function(){if(connecting)return;connecting=true;button.disabled=true;notice.textContent='Connecting to the integrated reader…';try{const result=await NativeRfid.command('connect',{});if(result.status!=='success')throw Error(result.message||'Connection failed');}catch(error){notice.textContent=error.message;showToast('failure',error.message);}finally{connecting=false;button.disabled=NativeRfid.currentState.connected;refresh();}};
@@ -16,5 +16,11 @@
  document.getElementById('below').textContent='On-device SDK · Read-back verification';
  const info=document.createElement('p');info.className='mobileHint';info.textContent='Use the trigger to scan. Select a tag once, enter data, then write and verify.';document.querySelector('.heading').append(info);
  document.getElementById('readerPower').setAttribute('aria-label','Antenna transmit power in dBm');
+ const data=document.getElementById('data');let modeQueue=Promise.resolve();
+ function changeScannerMode(mode){data.dataset.scannerMode='switching';modeQueue=modeQueue.catch(()=>{}).then(async()=>{if(!NativeRfid.currentState.connected)return;const result=await NativeRfid.command('scannerMode',{mode});if(result.status!=='success'){showToast('failure',result.message||'Scanner mode change failed');return;}data.dataset.scannerMode=mode;});}
+ data.addEventListener('focus',()=>changeScannerMode('barcode'));
+ data.addEventListener('blur',()=>changeScannerMode('rfid'));
+ window.addEventListener('readerstate',event=>{if(event.detail.connected&&document.activeElement===data&&data.dataset.scannerMode!=='barcode')changeScannerMode('barcode');});
+ NativeRfid.barcode=function(value){if(document.activeElement!==data||data.dataset.scannerMode!=='barcode')return;const encoded=document.querySelector('[name=format]:checked').value==='HEX'?Array.from(value,c=>c.charCodeAt(0).toString(16).padStart(2,'0')).join('').toUpperCase():value;data.setRangeText(encoded,data.selectionStart,data.selectionEnd,'end');data.dispatchEvent(new Event('input',{bubbles:true}));};
  button.click();
 })();
