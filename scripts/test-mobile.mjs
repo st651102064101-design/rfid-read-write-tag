@@ -13,7 +13,7 @@ const flush=async()=>{for(let i=0;i<8;i++)await new Promise(resolve=>setImmediat
 const epc='E2806F12000000022DF13118';
 const secondEpc='E28069150000401ECAB4A8D5';
 
-async function setup({ui=false,connected=false,reading=true,powerDbm=25}={}){
+async function setup({ui=false,connected=false,reading=false,powerDbm=25}={}){
  const commands=[],errors=[],timeouts=new Map(),intervals=new Map();let nextTimer=0,elapsed=0;
  const vc=new VirtualConsole();vc.on('jsdomError',error=>errors.push(error));
  const html=ui?asset('index.html').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,''):'<!doctype html><html><body></body></html>';
@@ -174,7 +174,7 @@ test('Android Back closes an open tag drawer or filter before leaving the app',a
 test('SDK bank-read errors remain visible and do not imply a writable capacity',async()=>{
  const a=await setup({ui:true,connected:true});try{
   await a.scan();choose(a);await a.tick(1500);a.reply('banks',{status:'success',banks:{EPC:'00003000'+epc},readableErrors:{USER:'Error: insufficient RF power',TID:'Error: password rejected'}});await flush();await a.w.pollLive();await flush();
-  bank(a,'USER');input(a,'ABC');assert.equal(a.doc.getElementById('write').disabled,true);assert.match(a.doc.querySelector('#tagDetails [data-memory="USER"]').textContent,/insufficient RF power/);assert.match(a.doc.getElementById('error').textContent,/Unknown size for USER/);
+  bank(a,'USER');input(a,'ABC');assert.equal(a.doc.getElementById('write').disabled,true);a.doc.getElementById('openTagInfo').click();assert.match(a.doc.querySelector('#tagDetails [data-memory="USER"]').textContent,/insufficient RF power/);assert.match(a.doc.getElementById('error').textContent,/Unknown size for USER/);
  }finally{a.close();}
 });
 
@@ -207,7 +207,7 @@ test('verified USER writes trigger a fresh memory read before the UI reuses bank
   assert.equal(a.doc.getElementById('write').disabled,true);assert.match(a.doc.getElementById('error').textContent,/Unknown size for USER/);
   await a.tick(1500);assert.equal(a.commands.filter(c=>c.operation==='banks').length,2);assert.equal(a.last('banks').body.epc,epc);
   a.reply('banks',{status:'success',banks:{USER:'414243'+'00'.repeat(5)}});await flush();await a.w.pollLive();await flush();
-  assert.match(a.doc.querySelector('#tagDetails [data-memory="USER"]').textContent,/ABC/);assert.equal(a.doc.getElementById('write').disabled,false);
+  a.doc.getElementById('openTagInfo').click();assert.match(a.doc.querySelector('#tagDetails [data-memory="USER"]').textContent,/ABC/);assert.equal(a.doc.getElementById('write').disabled,false);
  }finally{a.close();}
 });
 
@@ -216,8 +216,8 @@ test('disconnect drops cached memory for all tags and reconnect rereads the curr
   await a.scan();choose(a);await readBanks(a,{USER:'41424344'});assert.equal(a.doc.getElementById('connectReader').hidden,true);
   a.w.NativeRfid.state({connected:false,reading:false,message:'Connection lost'});await flush();assert.equal(a.doc.getElementById('connectReader').hidden,false);assert.equal(a.doc.getElementById('write').disabled,true);
   const events=(await(await a.w.fetch('/api/events')).json()).events;for(const event of events)for(const record of event.payload)assert.equal(Object.hasOwn(record.data,'USER'),false);
-  a.w.NativeRfid.state({connected:true,reading:true,message:'Connected'});await flush();await a.tick(1500);assert.equal(a.commands.filter(c=>c.operation==='banks').length,2);assert.equal(a.last('banks').body.epc,epc);assert.equal(a.doc.getElementById('connectReader').hidden,true);
-  a.reply('banks',{status:'success',banks:{USER:'45464748'}});await flush();await a.w.pollLive();await flush();assert.match(a.doc.querySelector('#tagDetails [data-memory="USER"]').textContent,/EFGH/);
+  a.w.NativeRfid.state({connected:true,reading:false,message:'Connected'});await flush();await a.tick(1500);assert.equal(a.commands.filter(c=>c.operation==='banks').length,2);assert.equal(a.last('banks').body.epc,epc);assert.equal(a.doc.getElementById('connectReader').hidden,true);
+  a.reply('banks',{status:'success',banks:{USER:'45464748'}});await flush();await a.w.pollLive();await flush();a.doc.getElementById('openTagInfo').click();assert.match(a.doc.querySelector('#tagDetails [data-memory="USER"]').textContent,/EFGH/);
  }finally{a.close();}
 });
 
@@ -264,7 +264,7 @@ test('partial bank reads expose TID and other actual data and retry missing bank
   await a.scan();choose(a);await a.tick(1500);
   a.reply('banks',{status:'success',banks:{EPC:'3000'+epc,TID:'E2801191A5030069565F9436',RESERVED:'0000000000000000'},readableErrors:{USER:'Reader error: Operation In Progress'}});
   await flush();await a.w.pollLive();
-  const text=a.doc.getElementById('tagInfoDialog').textContent;
+  a.doc.getElementById('openTagInfo').click();const text=a.doc.getElementById('tagInfoDialog').textContent;
   assert.match(text,/E2801191A5030069565F9436/);assert.match(text,/0000000000000000/);assert.match(text,/Operation In Progress/);
   const previous=a.commands.filter(c=>c.operation==='banks').length;
   await a.tick(1500);assert.equal(a.commands.filter(c=>c.operation==='banks').length,previous);
@@ -314,5 +314,77 @@ test('sensitive writes require explicit confirmation and remain blocked on inval
    const password=a.doc.getElementById('accessPassword');password.value='XYZ';password.dispatchEvent(new a.w.Event('input'));assert.equal(a.doc.getElementById('write').disabled,true);
    password.value='';password.dispatchEvent(new a.w.Event('input'));confirm.checked=false;confirm.dispatchEvent(new a.w.Event('change'));
   }
+ }finally{a.close();}
+});
+
+
+test('continuous trigger reading never starts memory access; release services the pending details',async()=>{
+ const a=await setup({ui:true,connected:true,reading:true});try{
+  await a.scan();choose(a);a.doc.querySelector('.tagDetailButton').click();
+  for(let i=0;i<30;i++)await a.tick(1500);
+  assert.equal(a.commands.filter(c=>c.operation==='banks').length,0);
+  a.w.NativeRfid.state({connected:true,reading:false});await flush();
+  assert.equal(a.commands.filter(c=>c.operation==='banks').length,1);assert.equal(a.last('banks').body.epc,epc);
+  a.reply('banks',{status:'success',banks:{TID:'E2801234',USER:'4142'}});await flush();
+  assert.match(a.doc.getElementById('tagDrawerContent').textContent,/E2801234/);
+ }finally{a.close();}
+});
+
+test('100000 rapid reports retain totals beyond the event history limit without fabricating memory reads',async()=>{
+ const a=await setup({connected:true,reading:true});try{
+  for(let i=0;i<100000;i++)a.w.NativeRfid.tags([{epc,seenCount:3,reportCount:1}]);
+  assert.equal(a.w.NativeRfid.scanStats.totalReads,300000);assert.equal(a.w.NativeRfid.scanStats.totalReports,100000);
+  const events=(await(await a.w.fetch('/api/events')).json()).events;
+  assert.ok(events.length<=100);assert.equal(events[0].payload[0].data.totalReads,300000);
+  const pending=a.w.NativeRfid.command('banks',{epc});a.reply('banks',{status:'success',banks:{USER:'4142'}});await pending;
+  assert.equal(a.w.NativeRfid.scanStats.totalReads,300000);assert.equal(a.w.NativeRfid.scanStats.totalReports,100000);
+ }finally{a.close();}
+});
+
+test('factory reset writes 00 across every readable USER bank and continues after a skip or failure',async()=>{
+ const a=await setup({ui:true,connected:true});try{
+  await a.scan([{epc,rssi:-40},{epc:secondEpc,rssi:-50},{epc:'E2801191A5030069565F9436',rssi:-55}]);
+  a.doc.getElementById('factoryReset').click();
+  assert.equal(a.doc.getElementById('factoryResetDialog').open,true);
+  assert.match(a.doc.getElementById('factoryResetStatus').textContent,/3 tags/);
+  a.doc.getElementById('cancelFactoryReset').click();
+  assert.equal(a.doc.getElementById('factoryResetDialog').open,false);
+  assert.equal(a.commands.filter(c=>c.operation==='banks'||c.operation==='write').length,0);
+  a.doc.getElementById('factoryReset').click();
+  const pending=a.doc.getElementById('confirmFactoryReset').onclick();
+  const answers={'E2806F12000000022DF13118':{status:'success',banks:{USER:'35'.repeat(4)},readableErrors:{}},'E28069150000401ECAB4A8D5':{status:'success',banks:{},readableErrors:{USER:'Read failed: ACCESS_TAG_MEMORY_OVERRUN_ERROR'}},'E2801191A5030069565F9436':{status:'success',banks:{USER:'3535'},readableErrors:{}}};
+  for(let i=0;i<3;i++){
+   await flush();const read=a.commands.filter(c=>c.operation==='banks').at(-1);assert.ok(answers[read.body.epc]);
+   a.reply('banks',answers[read.body.epc]);await flush();
+   if(answers[read.body.epc].banks.USER){const write=a.last('write');assert.equal(write.body.memoryBank,'USER');assert.equal(write.body.offsetBytes,0);assert.equal(write.body.lengthBytes,write.body.dataHex.length/2);assert.equal(write.body.dataHex,'00'.repeat(write.body.lengthBytes));assert.equal(write.body.confirmSensitive,false);a.reply('write',read.body.epc.endsWith('9436')?{status:'unknown',verified:false,message:'Partial write: 2 of 2 bytes'}:{status:'success',verified:true,durationMs:30});await flush();}
+  }
+  await pending;
+  assert.equal(a.commands.filter(c=>c.operation==='write').length,2);
+  assert.match(a.doc.getElementById('factoryResetStatus').textContent,/Finished · 1 reset · 1 skipped · 1 failed/);
+  assert.match(a.doc.getElementById('factoryResetLog').textContent,/skipped, no readable USER memory/);
+  assert.equal(a.doc.getElementById('factoryReset').disabled,false);
+ }finally{a.close();}
+});
+
+test('factory reset stays closed while the trigger is held and reports no tags without sending commands',async()=>{
+ const a=await setup({ui:true,connected:true,reading:true});try{
+  await a.scan();a.doc.getElementById('factoryReset').click();
+  assert.equal(a.doc.getElementById('confirmFactoryReset').disabled,true);
+  assert.match(a.doc.getElementById('factoryResetStatus').textContent,/Release the trigger/);
+  a.doc.getElementById('confirmFactoryReset').onclick();await flush();
+  assert.equal(a.commands.filter(c=>c.operation==='banks'||c.operation==='write').length,0);
+  a.w.NativeRfid.back();assert.equal(a.doc.getElementById('factoryResetDialog').open,false);
+ }finally{a.close();}
+});
+
+test('rapid UI updates reuse tag cards and lazily build details with exact read counts',async()=>{
+ const a=await setup({ui:true,connected:true,reading:true});try{
+  await a.scan([{epc,seenCount:2}]);const card=a.doc.querySelector('.eventcard');
+  assert.equal(card.querySelectorAll('.memoryCard').length,0);
+  for(let i=0;i<1000;i++)a.w.NativeRfid.tags([{epc,seenCount:4,reportCount:2}]);
+  await a.w.pollLive();assert.equal(a.doc.querySelector('.eventcard'),card);assert.match(card.textContent,/4002 times/);
+  assert.match(a.doc.getElementById('feedStatus').textContent,/4002 total reads/);
+  assert.equal(a.commands.filter(c=>c.operation==='banks').length,0);
+  a.doc.querySelector('.tagDetailButton').click();assert.equal(a.doc.querySelectorAll('#tagDrawerContent .memoryCard').length,4);
  }finally{a.close();}
 });

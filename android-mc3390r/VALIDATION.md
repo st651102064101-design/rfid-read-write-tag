@@ -76,3 +76,35 @@ Enabled SDK EPC prefilter for writes; TID prefilter is used only for EPC renames
 Physical USER test on E2806F12000000022DF13118: TEST006 (7 bytes, offset 0) returned verified success in 1180 ms. Read-back was 5445535430303672: the adjacent original byte 72 was preserved. Original USER data was backed up before the test. Restoration initially reported ACCESS_TAG_WRITE_FAILED with no response; subsequent read showed a partial write. After inspecting that actual data, only differing word at byte offset 6 was restored to 6572, verified in 1101 ms. Final complete read returned EPC 16 bytes, TID 12 bytes, USER 256 bytes and RESERVED 8 bytes without errors; USER matched the original backup. An intermediate read had ACCESS_TAG_CRC_ERROR. RF response remains intermittent; no automatic write retry or fabricated success is used.
 
 TID/RESERVED/EPC writes are covered by unit tests for validation, bank targeting, passwords, odd-byte preservation, read-back mismatch and unconfirmed errors. Physical modifications in those banks were not performed; unit tests do not establish that a factory-locked TID is writable.
+
+
+## Version 1.0.10 — rapid inventory and full USER write planning
+Disabled unique-tag suppression and selected Gen2 session S0 at connection. A two-second continuous physical inventory on the MC3390R returned 355 reports across 9 unique EPCs (about 177 reports/second), with zero SDK buffer-full events. Delivery coalesces SDK notifications, drains bounded batches on the SDK executor, preserves every SDK seen count and updates existing UI cards instead of rebuilding them.
+
+Access-sequence START/STOP events are now excluded from trigger inventory state unless an explicit inventory command is pending. Physical logs confirmed that a memory read no longer leaves the app falsely stuck in reading state after trigger release.
+
+USER payloads up to the observed bank limit are split into 8-byte Gen2 writes and each chunk is read back before the next chunk.
+
+Root cause of failed full USER writes: near-field saturation. A power sweep of identical 8-byte USER writes on E2806F12000000022DF13118 succeeded at 10, 15 and 20 dBm, returned CRC error at 24 and 27 dBm, and no response at 29.7 dBm. USER writes now temporarily use min(configured, 20) dBm, stepping to 15 and 10 dBm on failure, remember the last verified write power for the session, and restore the configured power afterwards. Because a USER rewrite of a fixed range is idempotent, a chunk is re-sent (up to 4 attempts) only after its read-back proves it is not yet correct. EPC, TID and RESERVED writes are still never retried.
+
+Chunk size was measured: 32-byte chunks succeeded in 1 of 10 full writes (tag lost mid-command; each failure reported verified partial bytes). 8-byte chunks were used for the final configuration.
+
+Physical stability results (256-byte USER, a distinct pattern per cycle, independent full-bank read after each write):
+- 10/10 full writes verified (≈25–27 s each) with the initial step-down ladder.
+- 20/20 full writes verified (22–32 s each, 0–14 chunk retries) with the final configuration, starting from a fresh app session.
+- 6/6 further full writes verified with configured and actual reader power confirmed at 27 dBm after every write and every read.
+- Original USER contents were backed up before testing and written back at the end; full read-back matched exactly.
+
+During the 20-cycle run, the in-app power read 29.7 dBm afterwards; this was not reproduced in the instrumented 6-cycle run, where the restore to 27 dBm was confirmed each cycle. Diagnostics now report the reader's actual transmit power (`readerPowerDbm`).
+
+All Java tests pass, including the one-million-report pipeline test, 256-byte write planning and the power step-down order. The debug APK builds, installs and connects on the physical MC3390R.
+
+
+### 2026-10-05: final rapid inventory validation (1.0.10)
+
+- Compared all 19 supported RF modes at fixed 27 dBm, then repeated the top candidates three times. Mode 21 was consistently faster than modes 8 and 24 in the repeated comparison. Selected S0, AB flip and population 32; unsupported readers retain their existing RF mode.
+- Installed the final APK over Wi-Fi. Three 10-second scans measured **228.40, 230.69 and 227.23 inventory reports/second**, compared with 102.36 reports/second for the same-day mode 0/S0/A/population 16 baseline (about 2.2x). These are repeat reports from nearby stationary tags, not unique tags/second or full-memory reads/second.
+- Final scans delivered exactly 2301/2327/2289 SDK reports to the interface. Each scan had one inventory start, zero memory requests, zero buffer-full events and zero delivery overflow; stop commands succeeded.
+- Read actual EPC, TID, USER and RESERVED on designated E2806F12000000022DF13118 in 436 ms with no bank errors. The complete scan profile remained S0/AB/32/mode 21 before and after. Value snapshots prevent SDK access filtering from retaining the mutated inventory state after memory access or writes. No tag data was modified during these speed checks.
+- Java **28/28** and interface **36/36** tests passed; debug APK assembled successfully. Load tests preserve one million Java reports across 1000 tags and 100000 interface reports; they prove software count preservation and scheduling, not a universal physical maximum.
+- Reproducible measurements: `benchmarks/2026-10-05-scan.json`. This is the fastest consistently verified setup among the tested configurations in these conditions; tag placement and RF conditions can change the rate.

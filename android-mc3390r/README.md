@@ -45,3 +45,19 @@ The supplied project includes a known Android <=9 compatibility fix that sets th
 The scan tone uses 100% application gain and follows the device Media volume without changing system volume. A dedicated DataWedge profile disables barcode input only for this app. Bank reads stop their access session and allow firmware to settle before subsequent reads.
 
 Memory details use an EPC-filtered four-read Access Sequence when supported. Whole-bank reads avoid repeated capacity probes. The access sequence uses session S0 temporarily and restores the previous session. Missing sequence results fall back to targeted reads; RF errors remain visible.
+
+
+## Rapid inventory validation
+
+Hold the trigger for continuous EPC inventory; release it for selected-tag memory details. Memory access never runs automatically while trigger inventory is active. Unique-tag suppression is disabled and read back from the device. SDK draining uses getReadTagsEx on one executor, with bounded work so stop commands can run. Display updates combine reports every 50 ms and reuse cards; cumulative counts survive the bounded event history. Sound remains event-driven.
+
+Unit tests exercise a million reports across 1000 EPCs, exact count preservation, late notifications, shutdown, control fairness, and 100000 JavaScript reports. These are software load tests; they do not prove the maximum RF rate in every antenna/tag/environment combination. Physical benchmark results are recorded in VALIDATION.md.
+
+To repeat the read-only scan benchmark with Node.js 22+ and the debug APK, unlock the handheld, open this app, keep tags stationary and do not press the trigger during the benchmark. Forward the current app WebView socket with ADB (use its current PID), then run from the repository root:
+
+```powershell
+adb -s DEVICE_WIFI_IP:5555 forward tcp:9223 localabstract:webview_devtools_remote_APP_PID
+node scripts/benchmark-mc3390r.mjs
+```
+
+The benchmark runs three 10-second scans using measured mode 21/S0/AB/population 32, checks SDK versus delivered counts, and restores the original settings in finally. It performs no tag writes. Memory-detail requests are deferred during the comparison. RF reports/second and unique tags are different measurements.

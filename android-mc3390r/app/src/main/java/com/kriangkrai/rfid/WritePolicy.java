@@ -1,5 +1,7 @@
 package com.kriangkrai.rfid;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /** Validation and Gen2 word planning independent of Android and the SDK. */
@@ -43,6 +45,38 @@ public final class WritePolicy {
     }
 
     public static int paddedLength(int length) { return length + length % 2; }
+
+    /** Split complete word data into bounded writes; callers verify every returned chunk. */
+    public static List<String> wordChunks(String data, int maxWords) {
+        String normalized = hex(data, false);
+        if (normalized.length() % 4 != 0 || maxWords < 1) {
+            throw new IllegalArgumentException("Write data must contain complete words and use a positive chunk size");
+        }
+        int maxHex = maxWords * 4;
+        List<String> chunks = new ArrayList<>();
+        for (int first = 0; first < normalized.length(); first += maxHex) {
+            chunks.add(normalized.substring(first, Math.min(normalized.length(), first + maxHex)));
+        }
+        return chunks;
+    }
+
+    /** Near-field tags return CRC/no-response at high power; USER writes step down through supported levels. */
+    public static List<Double> userWritePowers(double currentDbm, int[] levels) {
+        return userWritePowers(currentDbm, levels, null);
+    }
+
+    /** A previously verified write power is tried first; the standard ladder remains the fallback. */
+    public static List<Double> userWritePowers(double currentDbm, int[] levels, Double lastVerifiedDbm) {
+        List<Double> powers = new ArrayList<>();
+        double preferred = lastVerifiedDbm == null ? Math.min(currentDbm, 20) : lastVerifiedDbm;
+        for (double candidate : new double[]{preferred, Math.min(currentDbm, 20), 15, 10}) {
+            boolean supported = false;
+            for (int level : levels) if (Math.abs(serialPowerDbm(level) - candidate) < 0.00001) supported = true;
+            if (supported && !powers.contains(candidate)) powers.add(candidate);
+        }
+        if (powers.isEmpty()) powers.add(currentDbm);
+        return powers;
+    }
 
     /** Never fill a neighboring byte with an assumed value. */
     public static String wordData(String data, String before) {

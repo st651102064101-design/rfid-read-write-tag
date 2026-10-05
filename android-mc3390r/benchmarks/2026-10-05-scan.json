@@ -1,0 +1,810 @@
+{
+  "device": "MC3390R Android 8.1",
+  "appVersion": "1.0.10",
+  "conditions": "Stationary nearby tags; 27 dBm; repeated inventory reports, not unique tags/second; no tag writes",
+  "measurements": {
+    "scan-final-compare": {
+      "original": {
+        "session": 0,
+        "rfMode": 0,
+        "inventoryState": 0,
+        "powerDbm": 27,
+        "uniqueTagReporting": "DISABLE"
+      },
+      "runs": [
+        {
+          "config": {
+            "rfMode": 0,
+            "session": 0,
+            "inventoryState": 0,
+            "population": 16
+          },
+          "elapsedMs": 5109.600000008941,
+          "reports": 523,
+          "reportsPerSecond": 102.35634883338908,
+          "uiReports": 523,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 0,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 16
+          },
+          "elapsedMs": 5058.4000000059605,
+          "reports": 810,
+          "reportsPerSecond": 160.12968527578792,
+          "uiReports": 810,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 1,
+            "session": 0,
+            "inventoryState": 0,
+            "population": 16
+          },
+          "elapsedMs": 5071.70000000298,
+          "reports": 376,
+          "reportsPerSecond": 74.13687718117772,
+          "uiReports": 376,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 1,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 16
+          },
+          "elapsedMs": 5070.600000008941,
+          "reports": 825,
+          "reportsPerSecond": 162.7026387406905,
+          "uiReports": 825,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 24,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 16
+          },
+          "elapsedMs": 5068.20000000298,
+          "reports": 1215,
+          "reportsPerSecond": 239.73008168566466,
+          "uiReports": 1215,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 23,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 16
+          },
+          "elapsedMs": 5061.100000008941,
+          "reports": 808,
+          "reportsPerSecond": 159.64908814261182,
+          "uiReports": 808,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        }
+      ]
+    },
+    "scan-population": {
+      "original": {
+        "session": 0,
+        "rfMode": 0,
+        "inventoryState": 0,
+        "powerDbm": 27,
+        "uniqueTagReporting": "DISABLE"
+      },
+      "runs": [
+        {
+          "config": {
+            "rfMode": 24,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 4
+          },
+          "elapsedMs": 5062.0999999940395,
+          "reports": 1148,
+          "reportsPerSecond": 226.7833507835388,
+          "uiReports": 1148,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 24,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 8
+          },
+          "elapsedMs": 5052.5,
+          "reports": 1185,
+          "reportsPerSecond": 234.53735774369125,
+          "uiReports": 1185,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 24,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 16
+          },
+          "elapsedMs": 5056.5,
+          "reports": 1216,
+          "reportsPerSecond": 240.48254721645407,
+          "uiReports": 1216,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 24,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 5071.5,
+          "reports": 1306,
+          "reportsPerSecond": 257.5174997535246,
+          "uiReports": 1306,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 24,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 64
+          },
+          "elapsedMs": 5062,
+          "reports": 1193,
+          "reportsPerSecond": 235.6775977874358,
+          "uiReports": 1193,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        }
+      ]
+    },
+    "scan-all-modes-a": {
+      "original": {
+        "session": 0,
+        "rfMode": 0,
+        "inventoryState": 0,
+        "powerDbm": 27,
+        "uniqueTagReporting": "DISABLE"
+      },
+      "runs": [
+        {
+          "config": {
+            "rfMode": 0,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3053.7000000029802,
+          "reports": 452,
+          "reportsPerSecond": 148.01715951126792,
+          "uiReports": 452,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 1,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3061,
+          "reports": 493,
+          "reportsPerSecond": 161.05847762169225,
+          "uiReports": 493,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 3,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3087.7999999970198,
+          "reports": 598,
+          "reportsPerSecond": 193.6653928365105,
+          "uiReports": 598,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 4,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3098.7999999970198,
+          "reports": 640,
+          "reportsPerSecond": 206.53156060430345,
+          "uiReports": 640,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 7,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3088.800000011921,
+          "reports": 614,
+          "reportsPerSecond": 198.7826987819316,
+          "uiReports": 614,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 8,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3081.2000000029802,
+          "reports": 714,
+          "reportsPerSecond": 231.727898221248,
+          "uiReports": 714,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 11,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3079.5999999940395,
+          "reports": 581,
+          "reportsPerSecond": 188.6608650477739,
+          "uiReports": 581,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 13,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3061,
+          "reports": 551,
+          "reportsPerSecond": 180.00653381247957,
+          "uiReports": 551,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 14,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3052.7999999970198,
+          "reports": 558,
+          "reportsPerSecond": 182.78301886810297,
+          "uiReports": 558,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 17,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3094.2999999970198,
+          "reports": 574,
+          "reportsPerSecond": 185.50237533547258,
+          "uiReports": 574,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        }
+      ]
+    },
+    "scan-all-modes-b": {
+      "original": {
+        "session": 0,
+        "rfMode": 0,
+        "inventoryState": 0,
+        "powerDbm": 27,
+        "uniqueTagReporting": "DISABLE"
+      },
+      "runs": [
+        {
+          "config": {
+            "rfMode": 18,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3077.3999999910593,
+          "reports": 504,
+          "reportsPerSecond": 163.77461493516094,
+          "uiReports": 504,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 21,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3060.5999999940395,
+          "reports": 721,
+          "reportsPerSecond": 235.57472391080316,
+          "uiReports": 721,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 23,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3047.5,
+          "reports": 488,
+          "reportsPerSecond": 160.1312551271534,
+          "uiReports": 488,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 24,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3051.5,
+          "reports": 450,
+          "reportsPerSecond": 147.46845813534327,
+          "uiReports": 450,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 26,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3056.7999999970198,
+          "reports": 304,
+          "reportsPerSecond": 99.45040565306739,
+          "uiReports": 304,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 27,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3088,
+          "reports": 341,
+          "reportsPerSecond": 110.42746113989638,
+          "uiReports": 341,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 30,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3090.2000000029802,
+          "reports": 344,
+          "reportsPerSecond": 111.31965568560878,
+          "uiReports": 344,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 31,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3087.7999999970198,
+          "reports": 329,
+          "reportsPerSecond": 106.54835157727753,
+          "uiReports": 329,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 34,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 3088.7000000029802,
+          "reports": 399,
+          "reportsPerSecond": 129.18056140111213,
+          "uiReports": 399,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        }
+      ]
+    },
+    "scan-repeat": {
+      "original": {
+        "session": 0,
+        "rfMode": 0,
+        "inventoryState": 0,
+        "powerDbm": 27,
+        "uniqueTagReporting": "DISABLE"
+      },
+      "runs": [
+        {
+          "config": {
+            "rfMode": 8,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 5084.5999999940395,
+          "reports": 1089,
+          "reportsPerSecond": 214.17613971625627,
+          "uiReports": 1089,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 21,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 5092,
+          "reports": 1149,
+          "reportsPerSecond": 225.64807541241163,
+          "uiReports": 1149,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 24,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 5072.29999999702,
+          "reports": 859,
+          "reportsPerSecond": 169.35118190968686,
+          "uiReports": 859,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 24,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 5086.5,
+          "reports": 992,
+          "reportsPerSecond": 195.02604934630887,
+          "uiReports": 992,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 21,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 5077.5,
+          "reports": 1158,
+          "reportsPerSecond": 228.0649926144756,
+          "uiReports": 1158,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 8,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 5097.699999988079,
+          "reports": 874,
+          "reportsPerSecond": 171.44986954941322,
+          "uiReports": 874,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 8,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 5067.79999999702,
+          "reports": 982,
+          "reportsPerSecond": 193.77244563727407,
+          "uiReports": 982,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 21,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 5098.20000000298,
+          "reports": 1188,
+          "reportsPerSecond": 233.02342003046283,
+          "uiReports": 1188,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 24,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 5079.5,
+          "reports": 781,
+          "reportsPerSecond": 153.75529087508613,
+          "uiReports": 781,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        }
+      ]
+    },
+    "scan-installed-final": {
+      "original": {
+        "session": 0,
+        "rfMode": 21,
+        "inventoryState": 2,
+        "powerDbm": 27,
+        "uniqueTagReporting": "DISABLE"
+      },
+      "runs": [
+        {
+          "config": {
+            "rfMode": 21,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 10074.29999999702,
+          "reports": 2301,
+          "reportsPerSecond": 228.40296596296326,
+          "uiReports": 2301,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 21,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 10087.29999999702,
+          "reports": 2327,
+          "reportsPerSecond": 230.6861102575206,
+          "uiReports": 2327,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        },
+        {
+          "config": {
+            "rfMode": 21,
+            "session": 0,
+            "inventoryState": 2,
+            "population": 32
+          },
+          "elapsedMs": 10073.40000000596,
+          "reports": 2289,
+          "reportsPerSecond": 227.23211626646867,
+          "uiReports": 2289,
+          "bufferFull": 0,
+          "overflow": 0,
+          "starts": 1,
+          "bankRequests": 0,
+          "powerDbm": 27
+        }
+      ]
+    },
+    "memoryProfileCheck": {
+      "before": {
+        "session": 0,
+        "population": 32,
+        "inventoryState": 2,
+        "rfMode": 21
+      },
+      "after": {
+        "session": 0,
+        "population": 32,
+        "inventoryState": 2,
+        "rfMode": 21
+      },
+      "status": "success",
+      "durationMs": 436,
+      "readBanks": [
+        "EPC",
+        "TID",
+        "USER",
+        "RESERVED"
+      ],
+      "readableErrors": {}
+    }
+  }
+}

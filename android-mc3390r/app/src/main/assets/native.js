@@ -2,14 +2,28 @@
 (function(){
  if(!crypto.randomUUID)crypto.randomUUID=function(){const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;const h=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);};
  if(!AbortSignal.timeout)AbortSignal.timeout=function(ms){const c=new AbortController();setTimeout(()=>c.abort(),ms);return c.signal;};
- const pending=new Map(),results=new Map(),events=[],banks=new Map();let nextEvent=0;
+ const pending=new Map(),results=new Map(),events=[],banks=new Map(),scanTotals=new Map();let nextEvent=0,totalReads=0,totalReports=0;
  let readerState={connected:false,reading:false,powerDbm:null,minDbm:null,maxDbm:null,message:'Connect the integrated reader'};
  function call(operation,body,requestId){const id=requestId||crypto.randomUUID();return new Promise((resolve,reject)=>{if(!window.AndroidRfid||typeof AndroidRfid.command!=='function'){reject(Error('This screen requires the MC3390R Android app'));return;}const timer=setTimeout(()=>{pending.delete(id);reject(Error('Reader result timed out. Check the tag before retrying.'));},120000);pending.set(id,{resolve,reject,timer,operation,body});try{AndroidRfid.command(id,operation,JSON.stringify(body||{}));}catch(error){clearTimeout(timer);pending.delete(id);reject(error);}});}
- function saveTags(tags,memoryRead=false){const records=tags.filter(t=>/^(?:[0-9a-f]{2})+$/i.test(t.epc||'')).map(t=>({type:memoryRead?'MEMORY_READ':'INVENTORY',data:{idHex:t.epc.toUpperCase(),peakRssi:t.rssi,...(t.antenna!==undefined?{antenna:t.antenna}:{}),...(t.pc!==undefined?{PC:t.pc}:{}),...(t.crc!==undefined?{CRC:t.crc}:{}),...(t.seenCount!==undefined?{seenCount:t.seenCount}:{}),...(banks.get(t.epc.toUpperCase())||{})}}));if(!records.length)return;const previous=memoryRead?events.slice().reverse().find(event=>event.payload.some(record=>record.type==='INVENTORY'&&record.data.idHex===records[0].data.idHex)):null;events.push({id:++nextEvent,receivedAt:previous?previous.receivedAt:new Date().toISOString(),payload:records});if(events.length>200)events.splice(0,events.length-200);}
+ function saveTags(tags,memoryRead=false){
+  const records=[];let latestAt=0;
+  for(const t of tags){
+   if(!/^(?:[0-9a-f]{2})+$/i.test(t.epc||''))continue;
+   const epc=t.epc.toUpperCase(),old=scanTotals.get(epc)||{reads:0,reports:0,at:0};
+   if(!memoryRead){const reads=Number.isSafeInteger(t.seenCount)&&t.seenCount>0?t.seenCount:1,reports=Number.isSafeInteger(t.reportCount)&&t.reportCount>0?t.reportCount:1;old.reads+=reads;old.reports+=reports;old.at=Number.isFinite(t.receivedAt)?t.receivedAt:Date.now();totalReads+=reads;totalReports+=reports;scanTotals.set(epc,old);}
+   latestAt=Math.max(latestAt,old.at);
+   records.push({type:memoryRead?'MEMORY_READ':'INVENTORY',data:{idHex:epc,peakRssi:t.rssi,totalReads:old.reads,totalReports:old.reports,...(t.antenna!==undefined?{antenna:t.antenna}:{}),...(t.pc!==undefined?{PC:t.pc}:{}),...(t.crc!==undefined?{CRC:t.crc}:{}),...(t.seenCount!==undefined?{seenCount:t.seenCount}:{}),...(banks.get(epc)||{})}});
+  }
+  if(!records.length)return;
+  events.push({id:++nextEvent,receivedAt:new Date(latestAt||Date.now()).toISOString(),payload:records});
+  if(events.length>200)events.splice(0,events.length-200);
+  window.dispatchEvent(new CustomEvent('inventorydata'));
+ }
  function invalidateBanks(epc){const target=epc&&epc.toUpperCase();if(target)banks.delete(target);else banks.clear();for(const event of events)for(const record of event.payload){if(!target||record.data.idHex===target)for(const bank of ['EPC','TID','USER','RESERVED'])delete record.data[bank];}window.dispatchEvent(new CustomEvent('memoryinvalidated',{detail:{epc:target||null}}));}
  window.NativeRfid={
   get currentState(){return {...readerState};},
   command:call,
+  get scanStats(){return {totalReads,totalReports,uniqueTags:scanTotals.size};},
   invalidateBanks,
   back:function(){const open=document.querySelector("dialog[open]");if(!open)return false;const close=open.querySelector("[aria-label^=Close]");if(close)close.click();else if(open.close)open.close();else open.removeAttribute("open");return true;},
   tags:saveTags,

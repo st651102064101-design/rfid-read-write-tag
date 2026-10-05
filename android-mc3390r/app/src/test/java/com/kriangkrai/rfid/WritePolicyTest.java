@@ -10,6 +10,25 @@ public class WritePolicyTest {
         assertEquals("414243AB", WritePolicy.wordData("414243", "313233AB"));
         assertEquals("4142", WritePolicy.wordData("4142", "1234"));
     }
+    @Test public void fullUserBankIsSplitIntoBoundedCompleteWordWrites() {
+        StringBuilder source = new StringBuilder();
+        for (int i = 0; i < 128; i++) source.append("ABCD");
+        String data = source.toString();
+        java.util.List<String> chunks = WritePolicy.wordChunks(data, 4);
+        assertEquals(32, chunks.size());
+        assertEquals(data, String.join("", chunks));
+        for (String chunk : chunks) assertEquals(8, chunk.length() / 2);
+        assertThrows(IllegalArgumentException.class, () -> WritePolicy.wordChunks("ABC", 16));
+        assertThrows(IllegalArgumentException.class, () -> WritePolicy.wordChunks("ABCD", 0));
+    }
+    @Test public void userWritesStepDownFromSaturatingNearFieldPower() {
+        int[] table = new int[298];
+        for (int i = 0; i < table.length; i++) table[i] = i;
+        assertEquals(java.util.Arrays.asList(20.0, 15.0, 10.0), WritePolicy.userWritePowers(27, table));
+        assertEquals(java.util.Arrays.asList(12.5, 15.0, 10.0), WritePolicy.userWritePowers(12.5, table));
+        assertEquals(java.util.Arrays.asList(5.0), WritePolicy.userWritePowers(5, new int[]{50}));
+        assertEquals(java.util.Arrays.asList(10.0, 20.0, 15.0), WritePolicy.userWritePowers(27, table, 10.0));
+    }
     @Test public void shortBaselineNeverProducesAWrite() {
         assertThrows(IllegalArgumentException.class, () -> WritePolicy.wordData("414243", "1234"));
         assertThrows(IllegalArgumentException.class, () -> WritePolicy.wordData("414243", "1234567890"));
