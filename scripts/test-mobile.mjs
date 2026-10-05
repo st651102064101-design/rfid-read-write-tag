@@ -892,3 +892,26 @@ test('modal tabs slide between details and writing while keeping the close heade
  const start=new a.w.Event('touchstart');start.touches=[{clientX:20}];const end=new a.w.Event('touchend');end.changedTouches=[{clientX:100}];modal.querySelector('.modalTabs').dispatchEvent(start);modal.querySelector('.modalTabs').dispatchEvent(end);assert.equal(modal.dataset.view,'write');
  }finally{a.close();}
 });
+
+test('write locks close, tabs and Back until verification, then shows a central success badge',async()=>{
+ const a=await setup({ui:true,connected:true});try{
+ await a.scan();choose(a);input(a,'ABC');
+ const pending=a.doc.getElementById('writer').onsubmit(new a.w.Event('submit',{cancelable:true}));await flush();
+ const modal=a.doc.getElementById('writeTagDialog');assert.equal(a.w.writeUiLocked,true);assert.equal(modal.querySelector('.writeProgress').hidden,false);assert.match(modal.querySelector('.writeProgress').textContent,/Keep the tag close/);
+ for(const node of modal.querySelectorAll('button,input,textarea,select'))assert.equal(node.disabled,true);
+ modal.querySelector('[aria-label="Close write tag"]').click();a.w.NativeRfid.back();assert.equal(modal.open,true);
+ a.doc.getElementById('modalDetailsTab').click();assert.equal(modal.dataset.view,'write');assert.equal(a.doc.getElementById('writeSuccessBadge').open,false);
+ a.reply('write',{status:'success',verified:true});await a.delay(600);await pending;
+ assert.equal(a.w.writeUiLocked,false);assert.equal(modal.querySelector('.writeProgress').hidden,true);assert.equal(a.doc.getElementById('writeSuccessBadge').open,true);
+ assert.equal(a.doc.getElementById('modalDetailsTab').disabled,false);a.w.NativeRfid.back();assert.equal(a.doc.getElementById('writeSuccessBadge').open,false);assert.equal(modal.open,true);
+ }finally{a.close();}
+});
+test('failed or unverified writes unlock controls without showing a success badge',async()=>{
+ for(const status of ['failed','unknown']){
+ const a=await setup({ui:true,connected:true});try{
+ await a.scan();choose(a);input(a,'ABC');const pending=a.doc.getElementById('writer').onsubmit(new a.w.Event('submit',{cancelable:true}));await flush();
+ a.reply('write',{status,verified:false,message:'Read-back failed'});await a.delay(600);await pending;
+ assert.equal(a.w.writeUiLocked,false);assert.equal(a.doc.getElementById('writeSuccessBadge').open,false);assert.equal(a.doc.getElementById('modalDetailsTab').disabled,false);
+ }finally{a.close();}
+ }
+});

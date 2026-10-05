@@ -25,7 +25,7 @@
   command:call,
   get scanStats(){return {totalReads,totalReports,uniqueTags:scanTotals.size};},
   invalidateBanks,
-  back:function(){const open=document.querySelector("dialog[open]");if(!open)return false;const close=open.querySelector("[aria-label^=Close]");if(close)close.click();else if(open.close)open.close();else open.removeAttribute("open");return true;},
+  back:function(){if(window.writeUiLocked)return true;const open=[...document.querySelectorAll("dialog[open]")].pop();if(!open)return false;const close=open.querySelector("[aria-label^=Close]");if(close)close.click();else if(open.close)open.close();else open.removeAttribute("open");return true;},
   tags:saveTags,
   state:function(state){if(readerState.connected&&state.connected===false)invalidateBanks();readerState={...readerState,...state};window.dispatchEvent(new CustomEvent('readerstate',{detail:readerState}));},
   reply:function(id,result){const p=pending.get(id);if(!p)return;clearTimeout(p.timer);pending.delete(id);const value={...result,requestId:id};if(p.operation==='write'){value.epc=p.body.epc;invalidateBanks(p.body.epc);if(value.newEpc&&value.newEpc!==p.body.epc)invalidateBanks(value.newEpc);}if(p.operation==='banks'&&value.status==='success'&&value.banks){const merged={...value.banks,...(value.readableErrors||{})};banks.set(p.body.epc,merged);saveTags([{epc:p.body.epc}],true);}p.resolve(value);}
