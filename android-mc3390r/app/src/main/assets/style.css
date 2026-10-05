@@ -100,3 +100,5 @@
 .writeProgress[hidden]{display:none}.writeProgress strong{font-size:22px}.writeProgress p{line-height:1.6;max-width:320px}
 #writeSuccessBadge{width:calc(100vw - 48px);max-width:360px;box-sizing:border-box;border:1px solid #32b99b;border-radius:20px;background:#102d2d;color:#edf3ff;text-align:center;padding:26px;max-height:85vh;overflow-y:auto;overflow-x:hidden}
 #writeSuccessBadge::backdrop{background:#020811aa}#writeSuccessBadge svg{color:#75e5c1}#writeSuccessBadge p{overflow-wrap:anywhere;font-size:14px;line-height:1.6}#writeSuccessBadge button{width:100%;padding:14px;border:0;border-radius:10px;background:#087cff;color:white;font-weight:600}
+
+#powerSettingDialog{width:calc(100vw - 48px);max-width:360px;box-sizing:border-box;background:#102337;color:#edf3ff;border:1px solid #39709b;border-radius:20px;text-align:center;padding:28px;overflow-wrap:anywhere}#powerSettingDialog::backdrop{background:#020811bb}#powerSettingDialog h2{font-size:21px}#powerSettingDialog p{line-height:1.6;color:#b8cce4}

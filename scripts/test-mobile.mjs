@@ -214,9 +214,9 @@ test('power drag submits once on release and only becomes confirmed after native
 
   slider.dispatchEvent(new a.w.Event('change'));await flush();assert.equal(a.commands.filter(c=>c.operation==='power').length,1);assert.equal(a.last('power').body.powerDbm,20);assert.equal(slider.disabled,true);assert.match(a.doc.getElementById('powerFeedback').textContent,/Applying/);
 
-  a.w.NativeRfid.state({powerDbm:20});a.reply('power',{status:'success',verified:true,powerDbm:20});await a.delay(500);
+  const progress=a.doc.getElementById('powerSettingDialog');assert.equal(progress.open,true);assert.equal(a.w.NativeRfid.back(),true);assert.equal(progress.open,true);const cancel=new a.w.Event('cancel',{cancelable:true});progress.dispatchEvent(cancel);assert.equal(cancel.defaultPrevented,true);await a.delay(500);assert.equal(progress.open,true);a.w.NativeRfid.state({powerDbm:20});a.reply('power',{status:'success',verified:true,powerDbm:20});await a.delay(500);
 
-  assert.equal(slider.disabled,false);assert.equal(slider.value,'20');assert.match(a.doc.getElementById('powerFeedback').textContent,/Confirmed by reader/);assert.equal(a.doc.getElementById('toast').classList.contains('success'),true);
+  assert.equal(slider.disabled,false);assert.equal(slider.value,'20');assert.equal(progress.open,false);assert.equal(a.w.powerUiLocked,false);assert.match(a.doc.getElementById('powerFeedback').textContent,/Confirmed by reader/);assert.equal(a.doc.getElementById('toast').classList.contains('success'),true);
 
  }finally{a.close();}
 
@@ -242,7 +242,7 @@ test('MC3390R uses native trigger state without a reading switch',async()=>{
 
   assert.equal(a.doc.getElementById('write').disabled,true);
 
-  assert.match(a.doc.getElementById('readerStatus').textContent,/Offline/);
+  assert.equal(a.doc.getElementById('readerStatus'),null);
 
  }finally{a.close();}
 
@@ -256,7 +256,7 @@ test('an unconfirmed power change restores the actual device value instead of re
 
   a.reply('power',{status:'unknown',verified:false,message:'SDK power read-back failed'});await a.delay(500);
 
-  assert.equal(slider.value,'25');assert.equal(slider.disabled,false);assert.match(a.doc.getElementById('powerValue').textContent,/25 dBm/);assert.equal(a.doc.getElementById('toast').classList.contains('failure'),true);assert.match(a.doc.getElementById('toast').textContent,/SDK power read-back failed/);
+  assert.equal(a.doc.getElementById('powerSettingDialog').open,false);assert.equal(a.w.powerUiLocked,false);assert.equal(slider.value,'25');assert.equal(slider.disabled,false);assert.match(a.doc.getElementById('powerValue').textContent,/25 dBm/);assert.equal(a.doc.getElementById('toast').classList.contains('failure'),true);assert.match(a.doc.getElementById('toast').textContent,/SDK power read-back failed/);
 
  }finally{a.close();}
 
