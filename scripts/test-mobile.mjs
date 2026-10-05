@@ -443,3 +443,13 @@ test('failed barcode mode switches do not accept scans or report success',async(
   assert.match(a.doc.getElementById('toast').textContent,/Reader unavailable/);
  }finally{a.close();}
 });
+
+test('Filter and Factory reset stay hidden until tags are detected, independent of filter matches',async()=>{
+ const a=await setup({ui:true,connected:true,reading:true});try{
+  for(const id of ['openTagFilter','factoryReset'])assert.equal(a.doc.getElementById(id).hidden,true);
+  await a.scan();
+  for(const id of ['openTagFilter','factoryReset'])assert.equal(a.doc.getElementById(id).hidden,false);
+  const search=a.doc.getElementById('tagSearch');search.value='NO_MATCH';search.dispatchEvent(new a.w.Event('input'));
+  for(const id of ['openTagFilter','factoryReset'])assert.equal(a.doc.getElementById(id).hidden,false);
+ }finally{a.close();}
+});
