@@ -495,26 +495,39 @@ const writeBadge=document.createElement('dialog');writeBadge.id='writeSuccessBad
 function showWriteBadge(message,title='Write successful',failed=false){writeBadge.querySelector('h2').textContent=title;writeBadge.setAttribute('aria-label',title);writeBadge.classList.toggle('failed',failed);writeBadge.querySelector('p').textContent=message;if(writeBadge.showModal)writeBadge.showModal();else writeBadge.setAttribute('open','');}
 
 const resetPanel=el('details',undefined,'resetPanel');resetPanel.append(el('summary','Factory reset'));
-resetPanel.append(el('p','Clear this tag’s readable USER memory to 00. EPC, TID and passwords remain unchanged. Keep the tag close to the reader.'));
-const resetButton=el('button','Reset USER memory');resetButton.id='resetSelectedTag';resetButton.type='button';resetPanel.append(resetButton);document.querySelector('.panel.editor').append(resetPanel);
+
+resetPanel.append(el('p','Select the memory to clear to 00. This does not restore original factory identifiers or unlock memory. Keep the tag close to the reader.'));
+const resetOptions=el('fieldset',undefined,'resetOptions');resetOptions.append(el('legend','Reset selected memory'));
+for(const [bank,label] of [['USER','USER — Clear stored data'],['EPC','EPC — Clear tag ID (CRC / PC protected)'],['TID','TID — Only if writable; factory-locked tags will fail'],['RESERVED','RESERVED — Set Access / Kill passwords to 00000000']]){const row=el('label'),input=el('input');input.type='checkbox';input.value=bank;input.name='resetBank';row.append(input,el('span',label));resetOptions.append(row);}
+resetPanel.append(resetOptions);
+const resetButton=el('button','Reset selected memory');resetButton.id='resetSelectedTag';resetButton.type='button';resetButton.disabled=true;resetPanel.append(resetButton);document.querySelector('.panel.editor').append(resetPanel);
+resetOptions.addEventListener('change',()=>{resetButton.disabled=busy||!resetOptions.querySelector('input:checked');});
 resetButton.onclick=async()=>{
  if(busy||window.powerUiLocked)return;
- const epc=selectedEpc,password=$('accessPassword').value.trim();
+ const selected=[...resetOptions.querySelectorAll('input:checked')].map(input=>input.value);
+ if(!selected.length)return;
+ let epc=selectedEpc,password=$('accessPassword').value.trim();
  if(!epc||!NativeRfid.currentState.connected){showWriteBadge('Connect the reader and select a tag.','Reset failed',true);return;}
  if(NativeRfid.currentState.reading||NativeRfid.currentState.triggerHeld){showWriteBadge('Release the trigger before resetting this tag.','Reset failed',true);return;}
  if(password&&!/^[0-9A-Fa-f]{8}$/.test(password)){showWriteBadge('Access password must be 8 HEX digits.','Reset failed',true);return;}
  busy=true;update();writeProgress.querySelector('strong').textContent='Resetting and verifying...';setWriteUiLocked(true);
- let message='',failed=false;
+ const messages=[];let failed=false;
  try{
   const read=await NativeRfid.command('banks',{epc,accessPassword:password});
-  const user=read.status==='success'?read.banks?.USER:null;
-  if(typeof user!=='string'||!/^(?:[0-9A-F]{4})+$/i.test(user)||user.length/2>1024)throw Error(read.message||read.readableErrors?.USER||'No readable USER memory. Reset was not sent.');
-  const length=user.length/2;
-  const reply=await NativeRfid.command('write',{operation:'write',memoryBank:'USER',epc,offsetBytes:0,lengthBytes:length,accessPassword:password,confirmSensitive:false,dataHex:'00'.repeat(length)});
-  if(reply.status!=='success'||reply.verified!==true)throw Error(reply.message||'Reset could not be confirmed. Read the tag before retrying.');
-  message='USER memory cleared: '+length+' bytes. Read-back verified. '+epc;
- }catch(error){failed=true;message=actionableWriteMessage(error.message);}
- finally{busy=false;setWriteUiLocked(false);writeProgress.querySelector('strong').textContent='Writing and verifying...';update();showWriteBadge(message,failed?'Reset failed':'Reset successful',failed);}
+  if(read.status!=='success')throw Error(read.message||'Unable to read memory. Reset was not sent.');
+  // Change passwords before EPC; change EPC last so all preceding operations retain the target.
+  for(const bank of ['USER','TID','RESERVED','EPC'].filter(bank=>selected.includes(bank))){
+   const hex=bank==='EPC'?epc:read.banks?.[bank];
+   if(typeof hex!=='string'||!/^(?:[0-9A-F]{4})+$/i.test(hex)||hex.length/2>1024){failed=true;messages.push(bank+': '+(read.readableErrors?.[bank]||'No complete readable memory. Not reset.'));continue;}
+   const length=hex.length/2;
+   const reply=await NativeRfid.command('write',{operation:'write',memoryBank:bank,epc,offsetBytes:bank==='EPC'?4:0,lengthBytes:length,accessPassword:password,confirmSensitive:bank==='TID'||bank==='RESERVED',dataHex:'00'.repeat(length)});
+   if(reply.status!=='success'||reply.verified!==true){failed=true;messages.push(bank+': '+actionableWriteMessage(reply.message||'Reset not confirmed. Read the tag before retrying.'));messages.push('Remaining selected items were not reset.');break;}
+   messages.push(bank+': '+length+' bytes cleared. Read-back verified.');
+   if(bank==='RESERVED'){password='00000000';$('accessPassword').value=password;}
+   if(bank==='EPC'&&reply.newEpc){epc=reply.newEpc;selectWrittenEpc(epc);}
+  }
+ }catch(error){failed=true;messages.push(actionableWriteMessage(error.message));}
+ finally{busy=false;setWriteUiLocked(false);writeProgress.querySelector('strong').textContent='Writing and verifying...';resetPanel.open=false;if(writeDialog.close)writeDialog.close();else writeDialog.removeAttribute('open');update();showWriteBadge(messages.join('\n'),failed?'Reset incomplete':'Reset successful',failed);}
 };
 
 const clearData=el('button','Clear');clearData.id='clearData';clearData.type='button';$('data').before(clearData);clearData.onclick=()=>{if(busy)return;editorDirty=true;clearRequested=true;$('data').value='';$('offset').value=$('memoryBank').value==='EPC'?'4':'0';update();};
