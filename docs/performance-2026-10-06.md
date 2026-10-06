@@ -53,3 +53,9 @@ node android-mc3390r/.sdk-inspect/cdp.mjs --file scripts/mc3390r-epc-performance
 ```
 
 The benchmark performs inventory only, verifies delivery totals, and restores the original RF settings and TID scan mode. Keep tags stationary and do not pull the trigger during the measurement.
+
+## Additional validation
+
+A later paired comparison with the then-present tag pile gave RF mode 1 (FM0) 130.93 reports/sec and mode 21 97.71 reports/sec (population 32, approximately 3 seconds each). The field had changed relative to the earlier comparison; no universal fastest mode is asserted. Original RF mode was restored afterward.
+
+38 Java tests plus 73 UI/transport tests passed (111 total). The three temporary test EPCs were returned to zero: the first was directly verified by its TID after recovering a partial EPC restoration, the second by direct TID verification and subsequent inventory, and the third in subsequent TID inventory. The last inventory window did not observe the third tag; its restoration was confirmed in the preceding window. USER restoration was verified over the complete 256-byte range before restoring EPC.

@@ -90,7 +90,7 @@ public final class WritePolicy {
         return chunks;
     }
 
-    /** Writes start at the reader's maximum so a low scan range still reaches the tag; USER may then step down. */
+    /** Without a proven USER write level, try maximum first so a low scan range does not limit writing. */
     public static List<Double> userWritePowers(double currentDbm, int[] levels) {
         return userWritePowers(currentDbm, levels, null);
     }
