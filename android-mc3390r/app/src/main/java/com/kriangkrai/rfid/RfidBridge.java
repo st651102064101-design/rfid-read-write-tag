@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /** SDK calls and access operations share one executor; SDK events never wait on it. */
 public final class RfidBridge {
     // Measured on MC3390R: 16-word writes lose the tag mid-command; 4-word writes are stable.
-    private static final int USER_WRITE_CHUNK_WORDS = 4;
+    private static final int USER_WRITE_CHUNK_WORDS = 16;
     private static final int USER_CHUNK_ATTEMPTS = 4;
     private static final long TAG_WAIT_MS = 30000;
     // First 6 TID words: class, mask designer, model and the 48-bit serial that makes the chip unique.
@@ -281,6 +281,15 @@ public final class RfidBridge {
 
     private void setReadingConfirmed(RFIDReader rd, boolean enabled) throws Exception {
         try {
+            if (enabled) {
+                // Access operations can replace the SDK stop trigger. Restore continuous
+                // inventory on every start, including starts after writing or reading banks.
+                TriggerInfo continuous = new TriggerInfo();
+                continuous.StartTrigger.setTriggerType(START_TRIGGER_TYPE.START_TRIGGER_TYPE_IMMEDIATE);
+                continuous.StopTrigger.setTriggerType(STOP_TRIGGER_TYPE.STOP_TRIGGER_TYPE_IMMEDIATE);
+                rd.Config.setStartTrigger(continuous.StartTrigger);
+                rd.Config.setStopTrigger(continuous.StopTrigger);
+            }
             if (enabled && tidScan) startTidInventory(rd);
             else if (enabled) rd.Actions.Inventory.perform();
             else if (tidInventoryActive) stopTidInventory(rd);
@@ -666,6 +675,13 @@ public final class RfidBridge {
                     }
                 boolean[] done = new boolean[chunks.size()];
                 for (int i = 0; i < chunks.size(); i++) done[i] = WritePolicy.matchesBaseline(chunks.get(i), before, starts.get(i));
+                // Cached beforeHex is a planning hint, never proof of a successful no-op.
+                // Read the actual tag even if all planned chunks appear unchanged.
+                if (WritePolicy.allTrue(done)) {
+                    String actual = read(epc, bank, offset / 2, words, verifyPassword);
+                    for (int i = 0; i < chunks.size(); i++)
+                        done[i] = WritePolicy.matchesBaseline(chunks.get(i), actual, starts.get(i));
+                }
                 Exception last = null;
                 for (int round = 0; round < USER_CHUNK_ATTEMPTS && !WritePolicy.allTrue(done); round++) {
                     if (round > 0) {

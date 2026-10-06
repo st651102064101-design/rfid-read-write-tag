@@ -95,10 +95,10 @@ public final class WritePolicy {
         return userWritePowers(currentDbm, levels, null);
     }
 
-    /** A previously verified write power is tried after maximum if the near field saturates. */
+    /** Reuse a previously verified write power first; fall back to other supported levels. */
     public static List<Double> userWritePowers(double currentDbm, int[] levels, Double lastVerifiedDbm) {
         List<Double> powers = new ArrayList<>();
-        addSupported(powers, levels, maxSupportedDbm(levels), lastVerifiedDbm == null ? Double.NaN : lastVerifiedDbm, 20, 15, 10);
+        addSupported(powers, levels, lastVerifiedDbm == null ? Double.NaN : lastVerifiedDbm, maxSupportedDbm(levels), 20, 15, 10);
         if (powers.isEmpty()) powers.add(currentDbm);
         return powers;
     }

@@ -15,6 +15,21 @@ public class WritePolicyTest {
         assertThrows(IllegalArgumentException.class, () -> WritePolicy.matchesBaseline("0000", "0000", -1));
     }
 
+    @Test public void staleBaselineCannotVerifyAnUnchangedWrite() {
+        String desired = "00000000", cached = "00000000", actual = "41424344";
+        assertTrue(WritePolicy.matchesBaseline(desired, cached, 0));
+        assertFalse(WritePolicy.matchesBaseline(desired, actual, 0));
+        assertThrows(IllegalStateException.class, () -> WritePolicy.verifyReadBack(desired, actual));
+    }
+
+    @Test public void largerChunksCoverTheEntireBankWithoutTruncation() {
+        String data = new String(new char[512]).replace('\0', 'A');
+        java.util.List<String> chunks = WritePolicy.wordChunks(data, 16);
+        assertEquals(8, chunks.size());
+        assertEquals(data, String.join("", chunks));
+        for (String chunk : chunks) assertEquals(32, chunk.length() / 2);
+    }
+
     @Test public void oddBytePreservesNeighborInsteadOfZeroPadding() {
         assertEquals("414243AB", WritePolicy.wordData("414243", "313233AB"));
         assertEquals("4142", WritePolicy.wordData("4142", "1234"));
@@ -37,7 +52,7 @@ public class WritePolicyTest {
         assertEquals(java.util.Arrays.asList(29.7, 20.0, 15.0, 10.0), WritePolicy.userWritePowers(27, table));
         assertEquals(java.util.Arrays.asList(29.7, 20.0, 15.0, 10.0), WritePolicy.userWritePowers(5, table));
         assertEquals(java.util.Arrays.asList(5.0), WritePolicy.userWritePowers(5, new int[]{50}));
-        assertEquals(java.util.Arrays.asList(29.7, 10.0, 20.0, 15.0), WritePolicy.userWritePowers(27, table, 10.0));
+        assertEquals(java.util.Arrays.asList(10.0, 29.7, 20.0, 15.0), WritePolicy.userWritePowers(27, table, 10.0));
     }
     @Test public void epcWritesStartAtMaximumFromALowScanRange() {
         int[] table = new int[298];
